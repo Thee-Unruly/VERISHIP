@@ -104,124 +104,84 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main Grid: Control Panel vs Key Features */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '32px' }}>
-        
-        {/* Launch Panel */}
-        <div className="glow-card">
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '8px', letterSpacing: '-0.02em' }}>Launch Autonomous QA Run</h2>
-          <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', marginBottom: '32px' }}>
-            Specify the web target and verification flow. Enforced with pre-queue SSRF shield protection.
-          </p>
+      {/* Main Control Panel - Full Width */}
+      <div className="glow-card">
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '8px', letterSpacing: '-0.02em' }}>Launch Autonomous QA Run</h2>
+        <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', marginBottom: '32px' }}>
+          Specify the web target and verification flow. Enforced with pre-queue SSRF shield protection.
+        </p>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Target Web Application URL
+            </label>
+            <input
+              type="url"
+              required
+              className="glowing-input"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example-app.com"
+              style={{ fontFamily: 'JetBrains Mono' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Natural Language QA Goal
+            </label>
+            <textarea
+              required
+              className="glowing-input"
+              rows={5}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Describe your testing goal (e.g. Navigate to login, click elements, assert dashboard is visible)..."
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Target Web Application URL
+                Execution Priority
               </label>
-              <input
-                type="url"
-                required
+              <select
                 className="glowing-input"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example-app.com"
-                style={{ fontFamily: 'JetBrains Mono' }}
-              />
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+              >
+                <option value="interactive">Interactive (Real-Time)</option>
+                <option value="scheduled">Batch (Background Execution)</option>
+              </select>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Natural Language QA Goal
-              </label>
-              <textarea
-                required
-                className="glowing-input"
-                rows={5}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe your testing goal (e.g. Navigate to login, click elements, assert dashboard is visible)..."
-              />
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+              <button type="submit" className="glow-button" style={{ width: '100%' }} disabled={loading}>
+                {loading ? 'Initializing Context...' : '🚀 Execute Test Run'}
+              </button>
             </div>
+          </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          {error && (
+            <div style={{
+              background: 'rgba(244, 63, 94, 0.1)',
+              border: '1px solid rgba(244, 63, 94, 0.3)',
+              color: '#f87171',
+              padding: '16px',
+              borderRadius: '12px',
+              fontSize: '0.9rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <span style={{ fontSize: '1.2rem' }}>🛑</span>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Execution Priority
-                </label>
-                <select
-                  className="glowing-input"
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                >
-                  <option value="interactive">Interactive (Real-Time)</option>
-                  <option value="scheduled">Batch (Background Execution)</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                <button type="submit" className="glow-button" style={{ width: '100%' }} disabled={loading}>
-                  {loading ? 'Initializing Context...' : '🚀 Execute Test Run'}
-                </button>
+                <strong>SSRF / Ingress Blocked:</strong> {error}
               </div>
             </div>
-
-            {error && (
-              <div style={{
-                background: 'rgba(244, 63, 94, 0.1)',
-                border: '1px solid rgba(244, 63, 94, 0.3)',
-                color: '#f87171',
-                padding: '16px',
-                borderRadius: '12px',
-                fontSize: '0.9rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                <span style={{ fontSize: '1.2rem' }}>🛑</span>
-                <div>
-                  <strong>SSRF / Ingress Blocked:</strong> {error}
-                </div>
-              </div>
-            )}
-          </form>
-        </div>
-
-        {/* Feature Highlights Panel */}
-        <div className="glow-card" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Security & Execution Layer v2</h2>
-          
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <div style={{ fontSize: '1.5rem' }}>🛡️</div>
-            <div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>Ingress DNS Guard</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Performs pre-queue DNS lookup to intercept SSRF and DNS rebinding attacks on link-local or private subnets.
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <div style={{ fontSize: '1.5rem' }}>⚡</div>
-            <div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--accent-violet)' }}>Real Preflight load</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Fires up Playwright to wait for `networkidle` and records JavaScript console errors prior to invoking the LLM loop.
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <div style={{ fontSize: '1.5rem' }}>🔄</div>
-            <div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--accent-emerald)' }}>Resilient Provider Chain</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Primary Groq completions fall back to Anthropic or OpenAI to handle API rate limits and connection issues transparently.
-              </p>
-            </div>
-          </div>
-        </div>
-
+          )}
+        </form>
       </div>
 
       {/* Recent Runs Table */}
