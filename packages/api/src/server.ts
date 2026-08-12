@@ -42,6 +42,7 @@ async function start() {
         if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
           const mime = filePath.endsWith('.png') ? 'image/png' 
                      : filePath.endsWith('.webm') ? 'video/webm' 
+                     : filePath.endsWith('.ts') ? 'text/plain; charset=utf-8'
                      : 'application/octet-stream';
           reply.header('Content-Type', mime);
           return reply.send(fs.createReadStream(filePath));

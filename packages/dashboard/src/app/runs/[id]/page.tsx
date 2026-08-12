@@ -121,7 +121,7 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
           {job && (
             <div className="glow-card" style={{ padding: '28px' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '20px', letterSpacing: '-0.01em' }}>Execution Scope</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px', marginBottom: '20px' }}>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Target URL</span>
                   <p style={{ fontWeight: 600, wordBreak: 'break-all', fontSize: '0.95rem', marginTop: '4px', fontFamily: 'JetBrains Mono' }}>{job.url}</p>
@@ -160,6 +160,30 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
                         }}
                       >
                         📥 Download Trace
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Generating...</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Playwright Script</span>
+                  <div style={{ marginTop: '4px' }}>
+                    {run?.spec_url ? (
+                      <a 
+                        href={`http://localhost:4000${run.spec_url}`} 
+                        download
+                        style={{
+                          color: 'var(--accent-cyan)',
+                          textDecoration: 'none',
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        📄 Download Spec
                       </a>
                     ) : (
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Generating...</span>

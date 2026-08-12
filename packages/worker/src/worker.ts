@@ -193,6 +193,21 @@ const worker = new Worker(
         }
       }
 
+      // Generate copy-pasteable Playwright spec file from step history logs
+      let specUrl: string | undefined = undefined;
+      try {
+        const stepsRes = await pool.query(
+          `SELECT step_number as "stepNumber", action_taken as "actionTaken", tool_call_name as "toolCallName", tool_args as "toolArgs"
+           FROM step_logs WHERE run_id = $1 ORDER BY step_number ASC`,
+          [runId]
+        );
+        if (stepsRes.rows.length > 0) {
+          specUrl = await artifactWriter.writeSpecFile(stepsRes.rows, url, prompt);
+        }
+      } catch (specErr) {
+        console.error('[Worker] Error generating spec file:', specErr);
+      }
+
       // Calculate Fitness Score (Percentage of successful steps vs total)
       const fitnessScore = taxonomy === 'PASSED' ? 100 : taxonomy === 'RECOVERED' ? 85 : taxonomy === 'APP_DEFECT' ? 30 : 0;
 
@@ -200,8 +215,8 @@ const worker = new Worker(
       const finalStatus = taxonomy === 'PASSED' || taxonomy === 'RECOVERED' ? 'completed' : 'failed';
 
       await pool.query(
-        `UPDATE runs SET status = $1, taxonomy = $2, fitness_score = $3, total_steps = $4, duration_ms = $5, trace_url = $6, video_url = $7, completed_at = CURRENT_TIMESTAMP WHERE id = $8`,
-        [finalStatus, taxonomy, fitnessScore, stepCount, durationMs, traceUrl, videoUrl || null, runId]
+        `UPDATE runs SET status = $1, taxonomy = $2, fitness_score = $3, total_steps = $4, duration_ms = $5, trace_url = $6, video_url = $7, spec_url = $8, completed_at = CURRENT_TIMESTAMP WHERE id = $9`,
+        [finalStatus, taxonomy, fitnessScore, stepCount, durationMs, traceUrl, videoUrl || null, specUrl || null, runId]
       );
 
       await pool.query(

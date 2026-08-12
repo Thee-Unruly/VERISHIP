@@ -48,4 +48,62 @@ export class ArtifactWriter {
     }
     return undefined;
   }
+
+  async writeSpecFile(steps: any[], targetUrl: string, prompt: string): Promise<string> {
+    let specCode = `import { test, expect } from '@playwright/test';\n\n`;
+    specCode += `test('Autonomous Verification: ${prompt.replace(/'/g, "\\'")}', async ({ page }) => {\n`;
+    specCode += `  // Target App URL: ${targetUrl}\n`;
+    
+    for (const step of steps) {
+      specCode += `\n  // Step ${step.stepNumber}: ${step.actionTaken}\n`;
+      const args = step.toolArgs;
+      
+      switch (step.toolCallName) {
+        case 'navigate_to':
+          specCode += `  await page.goto('${args.url}', { waitUntil: 'networkidle' });\n`;
+          break;
+        case 'click_element':
+          specCode += `  await page.getByRole('${args.role}', { name: '${args.name}', exact: false }).click().catch(async () => {\n`;
+          specCode += `    await page.getByText('${args.name}', { exact: false }).click();\n`;
+          specCode += `  });\n`;
+          break;
+        case 'fill_input':
+          specCode += `  await page.getByLabel('${args.label}', { exact: false }).fill('${args.value}').catch(async () => {\n`;
+          specCode += `    await page.getByPlaceholder('${args.label}', { exact: false }).fill('${args.value}');\n`;
+          specCode += `  });\n`;
+          break;
+        case 'select_dropdown':
+          specCode += `  try {\n`;
+          specCode += `    const locator = page.getByLabel('${args.label}', { exact: false });\n`;
+          specCode += `    const tagName = await locator.evaluate(el => el.tagName);\n`;
+          specCode += `    if (tagName === 'SELECT') {\n`;
+          specCode += `      await locator.selectOption({ label: '${args.option}' });\n`;
+          specCode += `    } else {\n`;
+          specCode += `      await locator.click();\n`;
+          specCode += `      await page.getByRole('option', { name: '${args.option}' }).click();\n`;
+          specCode += `    }\n`;
+          specCode += `  } catch (err) {\n`;
+          specCode += `    await page.getByLabel('${args.label}', { exact: false }).click().catch(() => {});\n`;
+          specCode += `    await page.getByRole('option', { name: '${args.option}' }).click();\n`;
+          specCode += `  }\n`;
+          break;
+        case 'assert_condition':
+          if (args.assertion_type === 'body_exists') {
+            specCode += `  await expect(page.locator('body')).toBeVisible();\n`;
+          } else {
+            specCode += `  await expect(page.getByText('${args.expected_value}', { exact: false })).toBeVisible();\n`;
+          }
+          break;
+        case 'finish_test':
+          specCode += `  // Completed: ${args.summary}\n`;
+          break;
+      }
+    }
+    
+    specCode += `});\n`;
+    
+    const filepath = path.join(this.localDir, 'test.spec.ts');
+    fs.writeFileSync(filepath, specCode);
+    return `/artifacts/${this.runId}/test.spec.ts`;
+  }
 }
