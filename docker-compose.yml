@@ -48,7 +48,7 @@ services:
       - minio
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      until /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin; do echo 'Waiting for MinIO...'; sleep 1; done;
       /usr/bin/mc mb myminio/qa-artifacts --ignore-existing;
       /usr/bin/mc anonymous set download myminio/qa-artifacts;
       exit 0;
