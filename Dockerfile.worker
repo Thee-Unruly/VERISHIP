@@ -1,0 +1,21 @@
+FROM mcr.microsoft.com/playwright:v1.42.1-jammy
+
+WORKDIR /app
+
+# Copy root monorepo manifests
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/worker/package.json ./packages/worker/
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY packages/worker ./packages/worker
+
+# Build shared and worker packages
+RUN npx tsc --project packages/shared/tsconfig.json
+RUN npx tsc --project packages/worker/tsconfig.json
+
+CMD ["node", "packages/worker/dist/worker.js"]

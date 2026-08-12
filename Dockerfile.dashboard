@@ -1,0 +1,24 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# Copy root monorepo manifests
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/dashboard/package.json ./packages/dashboard/
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY packages/dashboard ./packages/dashboard
+
+# Build shared and dashboard packages
+RUN npx tsc --project packages/shared/tsconfig.json
+RUN npx next build packages/dashboard
+
+EXPOSE 3000
+
+ENV PORT 3000
+CMD ["npx", "next", "start", "packages/dashboard", "-p", "3000"]

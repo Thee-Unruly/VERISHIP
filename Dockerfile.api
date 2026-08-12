@@ -1,0 +1,23 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# Copy root monorepo manifests
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/api/package.json ./packages/api/
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY packages/api ./packages/api
+
+# Build shared and api packages
+RUN npx tsc --project packages/shared/tsconfig.json
+RUN npx tsc --project packages/api/tsconfig.json
+
+EXPOSE 4000
+
+CMD ["node", "packages/api/dist/server.js"]
