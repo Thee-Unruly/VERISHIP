@@ -186,6 +186,20 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
 
         messages[messages.length - 1]._action_taken = `${toolName}(${JSON.stringify(toolArgs)})`;
 
+        // Feed the assistant's decision and the tool execution outcome back to the dialog history
+        messages.push({
+          role: 'assistant',
+          content: JSON.stringify({
+            thought: llmResponse.thought,
+            toolCall: llmResponse.toolCall
+          })
+        });
+
+        messages.push({
+          role: 'user',
+          content: `[Tool Result] Tool '${toolName}' executed with status: ${execResult.success ? 'SUCCESS' : 'FAILED'}. Result details: ${execResult.message}`
+        });
+
         if (toolName === 'finish_test') {
           console.log(`[Worker] QA Test finish_test triggered at step ${step}.`);
           break;

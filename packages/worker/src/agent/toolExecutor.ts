@@ -124,12 +124,16 @@ export class ToolExecutor {
   private async assertCondition(assertionType: string, expectedValue: string): Promise<ExecutionResult> {
     if (assertionType === 'body_exists') {
       const exists = (await this.page.locator('body').count()) > 0;
-      if (!exists) throw new Error('Body tag missing from page');
+      if (!exists) return { success: false, message: 'Verified body tag is missing from page' };
       return { success: true, message: 'Verified body tag exists on page' };
     }
 
-    await this.page.getByText(expectedValue, { exact: false }).waitFor({ timeout: 5000 });
-    return { success: true, message: `Asserted condition: text '${expectedValue}' is present on page` };
+    try {
+      await this.page.getByText(expectedValue, { exact: false }).waitFor({ timeout: 5000 });
+      return { success: true, message: `Asserted condition: text '${expectedValue}' is present on page` };
+    } catch {
+      return { success: false, message: `Assertion failed: Text '${expectedValue}' was not found on the page after 5000ms` };
+    }
   }
 
   private async finishTest(summary: string): Promise<ExecutionResult> {
