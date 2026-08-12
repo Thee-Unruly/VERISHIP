@@ -56,18 +56,44 @@ export class ToolExecutor {
   }
 
   private async fillInput(label: string, value: string): Promise<ExecutionResult> {
+    const cleanLabel = label.toLowerCase();
+    
     try {
-      await this.page.getByLabel(label, { exact: false }).fill(value, { timeout: 5000 });
+      await this.page.getByLabel(label, { exact: false }).fill(value, { timeout: 3000 });
       return { success: true, message: `Filled input '${label}' with value '${value}'` };
-    } catch {
-      // Fallback: Placeholder or test-id
-      await this.page.getByPlaceholder(label, { exact: false }).fill(value, { timeout: 5000 });
-      return {
-        success: true,
-        message: `Filled input via placeholder fallback '${label}'`,
-        recovered: true,
-      };
+    } catch {}
+
+    try {
+      await this.page.getByPlaceholder(label, { exact: false }).fill(value, { timeout: 3000 });
+      return { success: true, message: `Filled input via placeholder fallback '${label}'`, recovered: true };
+    } catch {}
+
+    // Smart heuristic selector fallbacks for naked/unlabeled fields (e.g. Agile PMv2 login forms)
+    try {
+      if (cleanLabel.includes('email') || cleanLabel.includes('username') || cleanLabel.includes('user') || cleanLabel.includes('address')) {
+        const emailInput = this.page.locator('input[type="email"], input[type="text"]').first();
+        await emailInput.fill(value, { timeout: 3000 });
+        return {
+          success: true,
+          message: `Filled input via text/email CSS selector fallback for '${label}'`,
+          recovered: true
+        };
+      }
+
+      if (cleanLabel.includes('password') || cleanLabel.includes('pass')) {
+        const passInput = this.page.locator('input[type="password"]').first();
+        await passInput.fill(value, { timeout: 3000 });
+        return {
+          success: true,
+          message: `Filled input via password CSS selector fallback for '${label}'`,
+          recovered: true
+        };
+      }
+    } catch (err: any) {
+      throw new Error(`Failed to locate and fill input '${label}' via heuristic selectors: ${err?.message}`);
     }
+
+    throw new Error(`Unable to locate input field matching label or placeholder '${label}'`);
   }
 
   private async selectDropdown(label: string, option: string): Promise<ExecutionResult> {
