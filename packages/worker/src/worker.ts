@@ -78,10 +78,35 @@ const worker = new Worker(
 
       // 3. Agent Loop Execution
       const toolExecutor = new ToolExecutor(page);
+      const systemPrompt = `You are an automated Web Agent QA Assistant.
+Your goal is: "${prompt}"
+
+You must execute the test step-by-step. At each step, analyze the accessible DOM state and choose one of the available tools to proceed.
+Always respond in JSON format matching the schema:
+{
+  "thought": "Your step thought analysis explaining what you see and what you will do next",
+  "toolCall": {
+    "name": "one of the available tool names",
+    "args": {
+       // tool arguments matching the schema
+    }
+  }
+}
+
+AVAILABLE TOOLS:
+1. "navigate_to": Navigate to a URL. Params: { "url": "string" }
+2. "click_element": Click a button, link, or tab. Params: { "role": "string", "name": "string" }
+3. "fill_input": Type text into an input. Params: { "label": "string", "value": "string" }
+4. "select_dropdown": Choose an option. Params: { "label": "string", "option": "string" }
+5. "assert_condition": Assert text exists on page. Params: { "assertion_type": "text_exists" | "body_exists", "expected_value": "string" }
+6. "finish_test": Complete test run. Params: { "summary": "string" }
+
+Ensure the "name" property of "toolCall" matches exactly one of the tool names listed above. Do not output anything else besides valid JSON.`;
+
       const messages: LLMMessage[] = [
         {
           role: 'system',
-          content: `You are an automated Web Agent QA Assistant. Your goal is: "${prompt}". Execute steps using available tools. Reply in JSON format with "thought" and "toolCall".`,
+          content: systemPrompt,
         },
         {
           role: 'user',
