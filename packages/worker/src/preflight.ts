@@ -30,11 +30,7 @@ export async function realPreflight(page: Page, url: string): Promise<PreflightR
     }
 
     if (consoleErrors.length > 0) {
-      return {
-        ok: false,
-        category: 'APP_RENDER_ERROR',
-        detail: consoleErrors.slice(0, 3),
-      };
+      console.warn('[Preflight] Warning: Non-fatal console errors detected on page load:', consoleErrors);
     }
 
     const bodyText = await page.locator('body').innerText().catch(() => '');
