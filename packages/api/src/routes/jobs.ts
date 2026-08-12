@@ -56,7 +56,6 @@ export async function jobRoutes(fastify: FastifyInstance) {
       {
         jobId,
         priority: priority === 'interactive' ? 1 : 10,
-        groupKey: domain,
       }
     );
 
