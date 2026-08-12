@@ -1,0 +1,28 @@
+{
+  "name": "@universal-qa/worker",
+  "version": "2.0.0",
+  "main": "dist/worker.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node-dev --transpile-only src/worker.ts",
+    "start": "node dist/worker.js",
+    "test": "node --test dist/agent/toolExecutor.test.js"
+  },
+  "dependencies": {
+    "@universal-qa/shared": "file:../shared",
+    "bullmq": "^5.7.0",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.3.2",
+    "pg": "^8.11.3",
+    "playwright": "^1.42.1",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "@types/pg": "^8.11.2",
+    "@types/uuid": "^9.0.8",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
+}
