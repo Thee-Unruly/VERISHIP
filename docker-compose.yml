@@ -66,6 +66,8 @@ services:
       - DATABASE_URL=postgresql://qadevel:qapassword123@postgres:5432/qa_platform_v2
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+    volumes:
+      - artifacts_data:/app/artifacts
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,6 +89,8 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - HEADLESS=true
+    volumes:
+      - artifacts_data:/app/artifacts
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,3 +115,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  artifacts_data:

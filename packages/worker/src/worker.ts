@@ -45,7 +45,13 @@ const worker = new Worker(
       // 1. One job = disposable browser container/context. No cross-tenant sharing.
       const isHeadless = process.env.HEADLESS !== 'false';
       browser = await chromium.launch({ headless: isHeadless });
-      context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      context = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        recordVideo: {
+          dir: artifactWriter.getVideoDir(),
+          size: { width: 1280, height: 800 },
+        },
+      });
 
       // Start tracing for Playwright trace file
       await context.tracing.start({ screenshots: true, snapshots: true });
@@ -147,6 +153,16 @@ const worker = new Worker(
       // 4. Guaranteed try/finally cleanup (Section 8)
       const durationMs = Date.now() - startTime;
       let traceUrl: string | undefined = undefined;
+      let videoFile: string | null = null;
+
+      if (page) {
+        try {
+          const video = page.video();
+          if (video) {
+            videoFile = await video.path().catch(() => null);
+          }
+        } catch (e) {}
+      }
 
       if (context) {
         try {
@@ -162,6 +178,21 @@ const worker = new Worker(
         await browser.close().catch(() => {});
       }
 
+      let videoUrl: string | undefined = undefined;
+      if (videoFile) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const targetPath = path.join(artifactWriter.getVideoDir(), 'video.webm');
+          if (fs.existsSync(videoFile)) {
+            fs.copyFileSync(videoFile, targetPath);
+            videoUrl = `/artifacts/${runId}/video.webm`;
+          }
+        } catch (videoErr) {
+          console.error('[Worker] Error copying video:', videoErr);
+        }
+      }
+
       // Calculate Fitness Score (Percentage of successful steps vs total)
       const fitnessScore = taxonomy === 'PASSED' ? 100 : taxonomy === 'RECOVERED' ? 85 : taxonomy === 'APP_DEFECT' ? 30 : 0;
 
@@ -169,8 +200,8 @@ const worker = new Worker(
       const finalStatus = taxonomy === 'PASSED' || taxonomy === 'RECOVERED' ? 'completed' : 'failed';
 
       await pool.query(
-        `UPDATE runs SET status = $1, taxonomy = $2, fitness_score = $3, total_steps = $4, duration_ms = $5, trace_url = $6, completed_at = CURRENT_TIMESTAMP WHERE id = $7`,
-        [finalStatus, taxonomy, fitnessScore, stepCount, durationMs, traceUrl, runId]
+        `UPDATE runs SET status = $1, taxonomy = $2, fitness_score = $3, total_steps = $4, duration_ms = $5, trace_url = $6, video_url = $7, completed_at = CURRENT_TIMESTAMP WHERE id = $8`,
+        [finalStatus, taxonomy, fitnessScore, stepCount, durationMs, traceUrl, videoUrl || null, runId]
       );
 
       await pool.query(

@@ -28,4 +28,24 @@ export class ArtifactWriter {
   getTraceUrl(): string {
     return `/artifacts/${this.runId}/trace.zip`;
   }
+
+  getVideoDir(): string {
+    return this.localDir;
+  }
+
+  async saveVideo(page: Page): Promise<string | undefined> {
+    try {
+      const video = page.video();
+      if (!video) return undefined;
+      const originalPath = await video.path();
+      const targetPath = path.join(this.localDir, 'video.webm');
+      if (fs.existsSync(originalPath)) {
+        fs.copyFileSync(originalPath, targetPath);
+        return `/artifacts/${this.runId}/video.webm`;
+      }
+    } catch (err) {
+      console.error('[ArtifactWriter] Error saving video file:', err);
+    }
+    return undefined;
+  }
 }
