@@ -8,7 +8,9 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
   const [steps, setSteps] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'screenshots' | 'video'>('screenshots');
+  const [activeTab, setActiveTab] = useState<'screenshots' | 'video' | 'code'>('screenshots');
+  const [specCode, setSpecCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   const fetchJobData = () => {
@@ -74,6 +76,15 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
 
   const job = jobData?.job;
   const run = jobData?.run;
+
+  useEffect(() => {
+    if (run?.spec_url) {
+      fetch(`http://localhost:4000${run.spec_url}`)
+        .then((res) => res.text())
+        .then((code) => setSpecCode(code))
+        .catch(() => {});
+    }
+  }, [run?.spec_url]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -280,10 +291,10 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
 
         </div>
 
-        {/* Right Side: Visual Page Screenshot & Video Inspector */}
+        {/* Right Side: Visual Page Screenshot, Video & Playwright Code Inspector */}
         <div className="glow-card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', minHeight: '600px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-normal)', paddingBottom: '12px' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.01em' }}>Visual Inspector</h3>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.01em' }}>Visual & Code Inspector</h3>
             
             {/* Tab Selectors */}
             <div style={{ display: 'flex', gap: '8px', background: 'rgba(255, 255, 255, 0.03)', padding: '4px', borderRadius: '8px' }}>
@@ -319,10 +330,26 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
               >
                 Session Video
               </button>
+              <button
+                onClick={() => setActiveTab('code')}
+                style={{
+                  background: activeTab === 'code' ? 'var(--accent-cyan)' : 'transparent',
+                  color: activeTab === 'code' ? 'white' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Playwright Code
+              </button>
             </div>
           </div>
 
-          {activeTab === 'screenshots' ? (
+          {activeTab === 'screenshots' && (
             selectedScreenshot ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{
@@ -369,7 +396,9 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
                 <p style={{ fontSize: '0.9rem' }}>Visual render frames will appear as agent executes steps.</p>
               </div>
             )
-          ) : (
+          )}
+
+          {activeTab === 'video' && (
             run?.video_url ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{
@@ -415,6 +444,76 @@ export default function RunDetailsPage({ params }: { params: { id: string } }) {
               }}>
                 <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s infinite' }}>🎥</div>
                 <p style={{ fontSize: '0.9rem' }}>Session video is being recorded... WebM file will compile on run completion.</p>
+              </div>
+            )
+          )}
+
+          {activeTab === 'code' && (
+            specCode ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(specCode);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border-normal)',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent-cyan)'}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-normal)'}
+                  >
+                    {copied ? '✅ Copied to Clipboard!' : '📋 Copy Playwright Script'}
+                  </button>
+                </div>
+
+                <div style={{
+                  flex: 1,
+                  border: '1px solid var(--border-glow)',
+                  borderRadius: '12px',
+                  background: '#02050A',
+                  padding: '20px',
+                  overflowX: 'auto',
+                  maxHeight: '480px',
+                  fontFamily: 'JetBrains Mono',
+                  fontSize: '0.85rem',
+                  lineHeight: '1.6',
+                  color: '#F3F4F6',
+                  whiteSpace: 'pre'
+                }}>
+                  {specCode}
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', fontFamily: 'JetBrains Mono' }}>
+                  Copy-Pasteable Playwright Test Script (.spec.ts)
+                </p>
+              </div>
+            ) : (
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-muted)',
+                border: '2px dashed var(--border-normal)',
+                borderRadius: '12px',
+                gap: '12px',
+                minHeight: '400px'
+              }}>
+                <div style={{ fontSize: '2.5rem' }}>📄</div>
+                <p style={{ fontSize: '0.9rem' }}>Playwright script is generating... script compiles on run completion.</p>
               </div>
             )
           )}
