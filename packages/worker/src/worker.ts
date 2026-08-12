@@ -9,6 +9,8 @@ import { ToolExecutor } from './agent/toolExecutor';
 import { ArtifactWriter } from './storage/artifactWriter';
 import { FailureTaxonomy } from '@universal-qa/shared';
 
+import Redis from 'ioredis';
+
 dotenv.config();
 
 const connection = {
@@ -18,6 +20,12 @@ const connection = {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://qadevel:qapassword123@localhost:5432/qa_platform_v2',
+});
+
+// Initialize Redis pub/sub client for real-time dashboard events
+const pubRedis = new Redis({
+  host: connection.host,
+  port: connection.port,
 });
 
 const llmAdapter = createLLMAdapter();
@@ -134,6 +142,23 @@ const worker = new Worker(
           ]
         );
 
+        // Publish real-time step update to Redis pub/sub for the API Gateway
+        await pubRedis.publish('job_updates', JSON.stringify({
+          event: 'step_update',
+          jobId,
+          step: {
+            id: stepId,
+            run_id: runId,
+            step_number: step,
+            action_taken: llmResponse.thought,
+            tool_call_name: toolName,
+            tool_args: toolArgs,
+            tool_result: execResult.message,
+            screenshot_url: screenshotUrl,
+            created_at: new Date().toISOString()
+          }
+        })).catch(err => console.error('[Worker] Redis publish step_update error:', err));
+
         messages[messages.length - 1]._action_taken = `${toolName}(${JSON.stringify(toolArgs)})`;
 
         if (toolName === 'finish_test') {
@@ -223,6 +248,12 @@ const worker = new Worker(
         `UPDATE jobs SET status = $1, taxonomy = $2, failure_reason = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4`,
         [finalStatus, taxonomy, failureReason || null, jobId]
       );
+
+      // Publish real-time job completion update to Redis pub/sub for the API Gateway
+      await pubRedis.publish('job_updates', JSON.stringify({
+        event: 'job_completed',
+        jobId
+      })).catch(err => console.error('[Worker] Redis publish job_completed error:', err));
 
       console.log(`[Worker] Finished processing job ${jobId} with status ${finalStatus} (${taxonomy}) in ${durationMs}ms`);
     }

@@ -7,7 +7,34 @@ import { CreateJobInput } from '@universal-qa/shared';
 
 // Simple in-memory event bus for SSE listeners
 import { EventEmitter } from 'events';
+import Redis from 'ioredis';
+
 export const jobEvents = new EventEmitter();
+
+// Initialize Redis pub/sub subscriber client to listen to worker events
+const redisHost = process.env.REDIS_HOST || 'localhost';
+const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+const redisSubscriber = new Redis({
+  host: redisHost,
+  port: redisPort,
+});
+
+redisSubscriber.subscribe('job_updates').catch(err => {
+  console.error('[API Gateway] Redis subscribe error:', err);
+});
+
+redisSubscriber.on('message', (channel, message) => {
+  if (channel === 'job_updates') {
+    try {
+      const data = JSON.parse(message);
+      if (data.event) {
+        jobEvents.emit(data.event, data);
+      }
+    } catch (err) {
+      console.error('[API Gateway] Error parsing job update event:', err);
+    }
+  }
+});
 
 export async function jobRoutes(fastify: FastifyInstance) {
   // POST /api/v1/jobs - Submit a new QA test job
