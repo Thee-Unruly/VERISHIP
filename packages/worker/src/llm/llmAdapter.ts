@@ -21,40 +21,108 @@ export interface LLMProvider {
   complete(messages: LLMMessage[]): Promise<AgentResponse>;
 }
 
-export class GroqProvider implements LLMProvider {
-  name = 'Groq (llama-3.3-70b-versatile)';
-  private apiKey: string;
+/**
+ * Format system instructions from TOOL_DEFS if no system message exists
+ */
+function buildToolsInstruction(): string {
+  const toolDescriptions = Object.entries(TOOL_DEFS)
+    .map(([name, def]) => {
+      const toolDef = def as { description: string; params: Record<string, string> };
+      return `- "${name}": ${toolDef.description} (Params: ${JSON.stringify(toolDef.params)})`;
+    })
+    .join('\n');
 
-  constructor(apiKey?: string) {
+  return `\nAVAILABLE TOOLS:\n${toolDescriptions}`;
+}
+
+/**
+ * Safely parse and validate the LLM's raw text response into an AgentResponse object
+ */
+function parseAgentResponse(rawText: string): AgentResponse {
+  let cleaned = rawText.trim();
+  // Strip markdown code fences if present
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (err: any) {
+    throw new Error(`Failed to parse LLM JSON response: ${err.message}. Raw output: "${rawText.slice(0, 200)}"`);
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('LLM response must be a JSON object');
+  }
+
+  const thought = typeof parsed.thought === 'string' && parsed.thought.trim() !== ''
+    ? parsed.thought
+    : 'Executing requested action.';
+
+  let toolCall: AgentResponse['toolCall'] = undefined;
+  if (parsed.toolCall && typeof parsed.toolCall === 'object') {
+    const { name, args } = parsed.toolCall;
+    if (typeof name === 'string') {
+      toolCall = {
+        name,
+        args: typeof args === 'object' && args !== null ? args : {},
+      };
+    }
+  }
+
+  return { thought, toolCall };
+}
+
+export class GroqProvider implements LLMProvider {
+  name = 'Groq (openai/gpt-oss-120b)';
+  private apiKey: string;
+  private model: string;
+  private timeoutMs: number;
+
+  constructor(apiKey?: string, model?: string, timeoutMs = 30000) {
     this.apiKey = apiKey || process.env.GROQ_API_KEY || '';
+    this.model = model || process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+    this.timeoutMs = timeoutMs;
+    this.name = `Groq (${this.model})`;
   }
 
   async complete(messages: LLMMessage[]): Promise<AgentResponse> {
     if (!this.apiKey) throw new Error('Groq API Key not configured');
-    
-    // Perform fetch call to Groq API endpoint
+
+    const formattedMessages = messages.map(m => ({ role: m.role, content: m.content }));
+    const hasSystemMsg = formattedMessages.some(m => m.role === 'system');
+
+    if (!hasSystemMsg) {
+      formattedMessages.unshift({
+        role: 'system',
+        content: `You are a QA automation agent. Respond in JSON with format: {"thought": "...", "toolCall": {"name": "...", "args": {}}}${buildToolsInstruction()}`,
+      });
+    }
+
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        model: this.model,
+        messages: formattedMessages,
         temperature: 0.1,
-        response_format: { type: 'json_object' }
-      })
+        response_format: { type: 'json_object' },
+      }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(`Groq API returned ${response.status}: ${errText}`);
+      throw new Error(`Groq API returned HTTP ${response.status}: ${errText}`);
     }
 
     const data = await response.json();
     const rawContent = data.choices?.[0]?.message?.content || '{}';
-    return JSON.parse(rawContent);
+    return parseAgentResponse(rawContent);
   }
 }
 
@@ -63,17 +131,17 @@ export class MockFallbackProvider implements LLMProvider {
 
   async complete(messages: LLMMessage[]): Promise<AgentResponse> {
     const lastMsg = messages[messages.length - 1]?.content || '';
-    
+
     if (lastMsg.includes('Finish condition satisfied') || messages.length > 10) {
       return {
         thought: 'Completed testing requirement.',
-        toolCall: { name: 'finish_test', args: { summary: 'Automated test suite completed successfully.' } }
+        toolCall: { name: 'finish_test', args: { summary: 'Automated test suite completed successfully.' } },
       };
     }
 
     return {
       thought: 'Navigating and asserting target page accessibility state.',
-      toolCall: { name: 'assert_condition', args: { assertion_type: 'body_exists', expected_value: 'true' } }
+      toolCall: { name: 'assert_condition', args: { assertion_type: 'body_exists', expected_value: 'true' } },
     };
   }
 }

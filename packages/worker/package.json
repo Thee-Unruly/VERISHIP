@@ -6,7 +6,7 @@
     "build": "npx tsc",
     "dev": "npx ts-node-dev --transpile-only src/worker.ts",
     "start": "node dist/worker.js",
-    "test": "node --test dist/agent/toolExecutor.test.js"
+    "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
     "@universal-qa/shared": "file:../shared",
