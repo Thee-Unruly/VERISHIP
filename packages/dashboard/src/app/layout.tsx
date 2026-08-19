@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'VERISHIP | Universal QA Platform v2',
-  description: 'Autonomous containerized QA testing platform powered by Gemini and Playwright',
+  description: 'Autonomous containerized QA testing platform powered by AI and Playwright',
 };
 
 export default function RootLayout({
@@ -17,10 +17,10 @@ export default function RootLayout({
         <div className="bg-grid" />
         <div className="app-container">
           <header style={{
-            background: 'rgba(10, 15, 30, 0.7)',
-            backdropFilter: 'blur(12px)',
+            background: 'rgba(6, 9, 19, 0.85)',
+            backdropFilter: 'blur(16px)',
             borderBottom: '1px solid var(--border-normal)',
-            padding: '20px 48px',
+            padding: '18px 48px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -30,28 +30,53 @@ export default function RootLayout({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, var(--accent-violet), var(--accent-cyan))',
-                fontWeight: 800,
-                letterSpacing: '0.1em',
-                fontSize: '1rem',
-                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, var(--accent-blue), var(--accent-cyan))',
+                fontWeight: 900,
+                color: '#0f172a',
+                fontSize: '1.2rem',
+                boxShadow: '0 4px 15px rgba(56, 189, 248, 0.4)'
               }}>
-                VERISHIP
+                V
               </div>
-              <div style={{ height: '24px', width: '1px', background: 'var(--border-normal)' }} />
               <div>
-                <h1 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--text-main)' }}>Universal Agent QA Platform</h1>
-                <p style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 500, letterSpacing: '0.05em' }}>V2 SECURE SUITE</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', letterSpacing: '-0.02em' }}>VERISHIP</span>
+                  <span style={{
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '20px',
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    color: 'var(--accent-cyan)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    letterSpacing: '0.05em'
+                  }}>
+                    V2 ENGINE
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Universal Autonomous QA Agent Platform</p>
               </div>
             </div>
-            <nav style={{ display: 'flex', gap: '32px', fontSize: '0.9rem', fontWeight: 500 }}>
-              <a href="/" style={{ color: 'var(--text-main)', textDecoration: 'none', transition: 'color 0.2s' }}>Dashboard</a>
-              <a href="/runs" style={{ color: 'var(--text-muted)', textDecoration: 'none', transition: 'color 0.2s' }}>Executions</a>
-              <a href="https://github.com/Thee-Unruly/VERISHIP" target="_blank" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>GitHub</a>
+
+            <nav style={{ display: 'flex', gap: '32px', fontSize: '0.9rem', fontWeight: 600 }}>
+              <a href="/" style={{ color: 'var(--text-main)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                📊 Dashboard
+              </a>
+              <a href="/runs" style={{ color: 'var(--text-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', transition: 'color 0.2s' }}>
+                ⚡ Executions
+              </a>
+              <a href="https://github.com/Thee-Unruly/VERISHIP" target="_blank" style={{ color: 'var(--text-muted)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🐙 GitHub Repo
+              </a>
             </nav>
           </header>
+
           <main className="main-content">
             {children}
           </main>
