@@ -28,6 +28,10 @@ export class ToolExecutor {
         return this.selectDropdown(args.label, args.option);
       case 'assert_condition':
         return this.assertCondition(args.assertion_type, args.expected_value);
+      case 'clear_session':
+        return this.clearSession(args.clear_cookies, args.clear_storage);
+      case 'switch_persona':
+        return this.switchPersona(args.persona_name);
       case 'finish_test':
         return this.finishTest(args.summary);
       default:
@@ -134,6 +138,30 @@ export class ToolExecutor {
     } catch {
       return { success: false, message: `Assertion failed: Text '${expectedValue}' was not found on the page after 5000ms` };
     }
+  }
+
+  private async clearSession(clearCookies = true, clearStorage = true): Promise<ExecutionResult> {
+    try {
+      if (clearCookies && this.page.context()) {
+        await this.page.context().clearCookies();
+      }
+      if (clearStorage) {
+        await this.page.evaluate(() => {
+          try { localStorage.clear(); } catch {}
+          try { sessionStorage.clear(); } catch {}
+        }).catch(() => {});
+      }
+      return { success: true, message: 'Cleared session cookies and local/session storage successfully' };
+    } catch (err: any) {
+      return { success: false, message: `Failed to clear session: ${err?.message}` };
+    }
+  }
+
+  private async switchPersona(personaName: string): Promise<ExecutionResult> {
+    return {
+      success: true,
+      message: `Switched context to persona role: '${personaName}'. Context cleared and ready for new role authentication.`,
+    };
   }
 
   private async finishTest(summary: string): Promise<ExecutionResult> {

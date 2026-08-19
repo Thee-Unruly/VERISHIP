@@ -59,6 +59,40 @@ export async function initDb() {
         summarized BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS test_templates (
+        id VARCHAR(64) PRIMARY KEY,
+        workspace_id VARCHAR(64) NOT NULL DEFAULT 'default',
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        url TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        stages JSONB,
+        tags TEXT[],
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS run_memories (
+        id VARCHAR(64) PRIMARY KEY,
+        run_id VARCHAR(64) REFERENCES runs(id) ON DELETE CASCADE,
+        extracted_data JSONB,
+        passed_assertions JSONB,
+        failed_assertions JSONB,
+        selector_cache JSONB,
+        structured_summary TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS personas (
+        id VARCHAR(64) PRIMARY KEY,
+        workspace_id VARCHAR(64) NOT NULL DEFAULT 'default',
+        name VARCHAR(100) NOT NULL,
+        role VARCHAR(100) NOT NULL,
+        username VARCHAR(255),
+        metadata JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     console.log('[DB] Database tables initialized successfully.');
   } finally {

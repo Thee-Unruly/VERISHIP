@@ -6,6 +6,8 @@ export const TOOL_NAMES = [
   'fill_input',
   'select_dropdown',
   'assert_condition',
+  'clear_session',
+  'switch_persona',
   'finish_test',
 ] as const;
 
@@ -30,6 +32,13 @@ export const TOOL_SCHEMAS = {
   assert_condition: z.object({
     assertion_type: z.string(),
     expected_value: z.string(),
+  }),
+  clear_session: z.object({
+    clear_cookies: z.boolean().optional(),
+    clear_storage: z.boolean().optional(),
+  }),
+  switch_persona: z.object({
+    persona_name: z.string(),
   }),
   finish_test: z.object({
     summary: z.string(),
@@ -67,6 +76,18 @@ export const TOOL_DEFS = {
     params: { assertion_type: 'string', expected_value: 'string' },
     handler: 'assertCondition',
     schema: TOOL_SCHEMAS.assert_condition,
+  },
+  clear_session: {
+    description: 'Clear browser cookies and local storage state to prepare for switching roles or user sessions',
+    params: { clear_cookies: 'boolean', clear_storage: 'boolean' },
+    handler: 'clearSession',
+    schema: TOOL_SCHEMAS.clear_session,
+  },
+  switch_persona: {
+    description: 'Acknowledge switching to a specific user role/persona credential (e.g. employee, approver)',
+    params: { persona_name: 'string' },
+    handler: 'switchPersona',
+    schema: TOOL_SCHEMAS.switch_persona,
   },
   finish_test: {
     description: 'Complete the QA test execution with a final summary and result',

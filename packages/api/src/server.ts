@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import dotenv from 'dotenv';
 import { initDb } from './db';
 import { jobRoutes } from './routes/jobs';
+import { templateRoutes } from './routes/templates';
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ async function start() {
 
     await initDb();
     await fastify.register(jobRoutes);
+    await fastify.register(templateRoutes);
 
     fastify.get('/health', async () => {
       return { status: 'ok', service: 'Universal Web Agent QA API Gateway v2' };

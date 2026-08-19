@@ -99,7 +99,9 @@ AVAILABLE TOOLS:
 3. "fill_input": Type text into an input. Params: { "label": "string", "value": "string" }
 4. "select_dropdown": Choose an option. Params: { "label": "string", "option": "string" }
 5. "assert_condition": Assert text exists on page. Params: { "assertion_type": "text_exists" | "body_exists", "expected_value": "string" }
-6. "finish_test": Complete test run. Params: { "summary": "string" }
+6. "clear_session": Clear session cookies/storage to switch roles. Params: { "clear_cookies": boolean, "clear_storage": boolean }
+7. "switch_persona": Switch user role context (e.g. employee, approver). Params: { "persona_name": "string" }
+8. "finish_test": Complete test run. Params: { "summary": "string" }
 
 Ensure the "name" property of "toolCall" matches exactly one of the tool names listed above. Do not output anything else besides valid JSON.`;
 
@@ -270,6 +272,51 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
         }
       } catch (specErr) {
         console.error('[Worker] Error generating spec file:', specErr);
+      }
+
+      // Persist structured Run Memory for history / prompt memory retrieval
+      try {
+        const memoryRes = await pool.query(
+          `SELECT step_number, tool_call_name, tool_args, tool_result FROM step_logs WHERE run_id = $1 ORDER BY step_number ASC`,
+          [runId]
+        );
+        const passedAssertions: string[] = [];
+        const failedAssertions: string[] = [];
+        const selectorCache: Record<string, string> = {};
+        const extractedData: Record<string, unknown> = {};
+
+        for (const row of memoryRes.rows) {
+          if (row.tool_call_name === 'assert_condition') {
+            const expected = row.tool_args?.expected_value || '';
+            if (row.tool_result.includes('Asserted condition') || row.tool_result.includes('Verified')) {
+              passedAssertions.push(expected);
+            } else {
+              failedAssertions.push(expected);
+            }
+          }
+          if (row.tool_call_name === 'click_element' || row.tool_call_name === 'fill_input' || row.tool_call_name === 'select_dropdown') {
+            const key = `${row.tool_call_name}:${row.tool_args?.role || row.tool_args?.label || ''}`;
+            selectorCache[key] = row.tool_result;
+          }
+        }
+
+        const memoryId = `mem_${runId}`;
+        await pool.query(
+          `INSERT INTO run_memories (id, run_id, extracted_data, passed_assertions, failed_assertions, selector_cache, structured_summary)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            memoryId,
+            runId,
+            JSON.stringify(extractedData),
+            JSON.stringify(passedAssertions),
+            JSON.stringify(failedAssertions),
+            JSON.stringify(selectorCache),
+            `Run ${runId} completed with ${passedAssertions.length} assertions passed and ${failedAssertions.length} failed.`,
+          ]
+        );
+      } catch (memErr) {
+        console.error('[Worker] Error writing run memory:', memErr);
       }
 
       // Calculate Fitness Score (Percentage of successful steps vs total)

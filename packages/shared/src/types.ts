@@ -55,3 +55,48 @@ export interface PreflightResult {
   category?: 'TARGET_UNREACHABLE' | 'APP_RENDER_ERROR' | 'SSRF_BLOCKED';
   detail?: string | string[];
 }
+
+export interface TestTemplate {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  url: string;
+  prompt: string;
+  stages?: Array<{ stageNumber: number; personaName?: string; goal: string }>;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTemplateInput {
+  name: string;
+  description?: string;
+  url: string;
+  prompt: string;
+  workspaceId?: string;
+  tags?: string[];
+  stages?: Array<{ stageNumber: number; personaName?: string; goal: string }>;
+}
+
+export interface RunMemory {
+  id: string;
+  runId: string;
+  extractedData: Record<string, unknown>;
+  passedAssertions: string[];
+  failedAssertions: string[];
+  selectorCache: Record<string, string>;
+  structuredSummary: string;
+  createdAt: string;
+}
+
+export interface Persona {
+  id: string;
+  workspaceId: string;
+  name: string;
+  role: string;
+  username?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+

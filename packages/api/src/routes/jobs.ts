@@ -159,4 +159,72 @@ export async function jobRoutes(fastify: FastifyInstance) {
       jobEvents.removeListener('job_completed', listener);
     });
   });
+
+  // GET /api/v1/jobs/:id/memory - Get structured run memory for a job
+  fastify.get('/api/v1/jobs/:id/memory', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = req.params;
+    const runsRes = await pool.query(`SELECT id FROM runs WHERE job_id = $1 ORDER BY created_at DESC LIMIT 1`, [id]);
+    if (runsRes.rowCount === 0) {
+      return reply.status(404).send({ error: 'No runs found for job' });
+    }
+    const runId = runsRes.rows[0].id;
+    const memRes = await pool.query(`SELECT * FROM run_memories WHERE run_id = $1`, [runId]);
+    return reply.send({
+      jobId: id,
+      runId,
+      memory: memRes.rows[0] || null,
+    });
+  });
+
+  // POST /api/v1/jobs/:id/rerun - Re-trigger an existing job with its prompt & memory
+  fastify.post('/api/v1/jobs/:id/rerun', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = req.params;
+    const jobRes = await pool.query(`SELECT * FROM jobs WHERE id = $1`, [id]);
+    if (jobRes.rowCount === 0) {
+      return reply.status(404).send({ error: 'Job not found' });
+    }
+
+    const parentJob = jobRes.rows[0];
+    const guardCheck = await validateTargetUrl(parentJob.url);
+    if (!guardCheck.ok) {
+      return reply.status(400).send({ error: 'Ingress Guard URL Validation Failed', reason: guardCheck.reason });
+    }
+
+    const newJobId = `job_${uuidv4().replace(/-/g, '')}`;
+    const newRunId = `run_${uuidv4().replace(/-/g, '')}`;
+
+    await pool.query(
+      `INSERT INTO jobs (id, workspace_id, url, prompt, priority, status) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [newJobId, parentJob.workspace_id, parentJob.url, parentJob.prompt, 'interactive', 'pending']
+    );
+
+    await pool.query(
+      `INSERT INTO runs (id, job_id, status) VALUES ($1, $2, $3)`,
+      [newRunId, newJobId, 'running']
+    );
+
+    await qaJobQueue.add(
+      'execute-qa-run',
+      {
+        jobId: newJobId,
+        runId: newRunId,
+        url: parentJob.url,
+        prompt: parentJob.prompt,
+        workspaceId: parentJob.workspace_id,
+        priority: 'interactive',
+      },
+      {
+        jobId: newJobId,
+        priority: 1,
+      }
+    );
+
+    return reply.status(201).send({
+      success: true,
+      jobId: newJobId,
+      runId: newRunId,
+      parentJobId: id,
+      message: 'Job re-triggered successfully from history.',
+    });
+  });
 }
