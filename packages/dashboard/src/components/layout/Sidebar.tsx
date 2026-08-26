@@ -21,17 +21,19 @@ import {
   Zap,
   Bot,
   User,
+  Check,
+  PlusCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface UserInfo {
-  id: number;
-  username: string;
-  email: string;
-  first_name?: string;
-  last_name?: string;
-  role: string;
-}
+import { useProjects } from "@/context/ProjectsContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const qaManagementNav = [
   { name: "Projects", href: "/projects", icon: FolderKanban },
@@ -58,39 +60,8 @@ interface AppSidebarProps {
 export function AppSidebar({ collapsed, setCollapsed }: AppSidebarProps) {
   const [qaManagementOpen, setQaManagementOpen] = useState(true);
   const [automatedTestingOpen, setAutomatedTestingOpen] = useState(true);
-  const [user, setUser] = useState<UserInfo | null>(null);
+  const { projects, selectedProjectId, setSelectedProjectId, selectedProject } = useProjects();
   const location = useLocation();
-
-  useEffect(() => {
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
-      try {
-        setUser(JSON.parse(userStr));
-      } catch (err) {
-        console.error("Error parsing user:", err);
-      }
-    }
-  }, []);
-
-  const displayName =
-    user && (user.first_name || user.last_name)
-      ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
-      : user?.username || "Ibrahim Fadhili";
-
-  const initials =
-    displayName
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "IF";
-
-  const roleText =
-    user?.role === "admin"
-      ? "QA Lead • Admin"
-      : user?.role
-      ? `${user.role} • Workspace`
-      : "QA Lead • Enterprise";
 
   return (
     <aside
@@ -119,37 +90,108 @@ export function AppSidebar({ collapsed, setCollapsed }: AppSidebarProps) {
           )}
         </div>
 
-        {/* User Profile / Role Card */}
+        {/* Dynamic Project Switcher Dropdown */}
         {!collapsed ? (
           <div className="border-b border-sidebar-border p-3">
-            <Link
-              to="/profile"
-              className="flex w-full items-center gap-3 rounded-lg bg-sidebar-accent/50 p-2 text-left transition-all hover:bg-sidebar-accent border border-sidebar-border/60 group"
-              title="View Profile Settings"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-accent text-accent-foreground font-bold text-xs shadow-sm flex-shrink-0">
-                {initials}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="truncate text-xs font-semibold text-sidebar-foreground group-hover:text-primary transition-colors">
-                  {displayName}
-                </p>
-                <p className="truncate text-[11px] text-sidebar-muted font-medium flex items-center gap-1.5 mt-0.5">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                  <span>{roleText}</span>
-                </p>
-              </div>
-            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex w-full items-center gap-3 rounded-lg bg-sidebar-accent/60 p-2.5 text-left transition-all hover:bg-sidebar-accent border border-sidebar-border/70 group focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  title="Switch Active QA Project"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary/20 text-sidebar-primary flex-shrink-0 group-hover:scale-105 transition-transform">
+                    <FolderKanban className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-xs font-semibold text-sidebar-foreground group-hover:text-primary transition-colors">
+                      {selectedProject?.name || "Select Project..."}
+                    </p>
+                    <p className="truncate text-[11px] text-sidebar-muted flex items-center gap-1.5 mt-0.5">
+                      <span className={cn(
+                        "inline-block h-1.5 w-1.5 rounded-full flex-shrink-0",
+                        selectedProject?.status === "at-risk" || selectedProject?.status === "delayed" ? "bg-amber-500" : "bg-emerald-500"
+                      )} />
+                      <span className="capitalize">{selectedProject?.status || "Active Workspace"}</span>
+                    </p>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-sidebar-muted group-hover:text-sidebar-foreground transition-colors flex-shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                  Active QA Projects ({projects.length})
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {projects.map((proj) => {
+                  const isSelected = proj.id === selectedProjectId || String(proj.id) === String(selectedProjectId);
+                  return (
+                    <DropdownMenuItem
+                      key={proj.id}
+                      onClick={() => setSelectedProjectId(proj.id)}
+                      className={cn(
+                        "flex items-center justify-between cursor-pointer py-2",
+                        isSelected && "bg-accent/15 font-medium text-primary"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <FolderKanban className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span className="truncate text-xs">{proj.name}</span>
+                      </div>
+                      {isSelected && <Check className="h-3.5 w-3.5 text-primary flex-shrink-0 ml-2" />}
+                    </DropdownMenuItem>
+                  );
+                })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/projects" className="flex items-center gap-2 text-xs text-primary font-medium cursor-pointer">
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    <span>Manage All Projects</span>
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ) : (
           <div className="border-b border-sidebar-border p-3 flex justify-center">
-            <Link
-              to="/profile"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-accent text-accent-foreground font-bold text-[11px] shadow-sm hover:scale-105 transition-transform"
-              title={`${displayName} (${roleText})`}
-            >
-              {initials}
-            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary/20 text-sidebar-primary hover:bg-sidebar-primary/30 transition-colors"
+                  title={`Project: ${selectedProject?.name || 'Switch Project'}`}
+                >
+                  <FolderKanban className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                  Active Project
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {projects.map((proj) => {
+                  const isSelected = proj.id === selectedProjectId || String(proj.id) === String(selectedProjectId);
+                  return (
+                    <DropdownMenuItem
+                      key={proj.id}
+                      onClick={() => setSelectedProjectId(proj.id)}
+                      className={cn(
+                        "flex items-center justify-between cursor-pointer py-2",
+                        isSelected && "bg-accent/15 font-medium text-primary"
+                      )}
+                    >
+                      <span className="truncate text-xs">{proj.name}</span>
+                      {isSelected && <Check className="h-3.5 w-3.5 text-primary flex-shrink-0 ml-2" />}
+                    </DropdownMenuItem>
+                  );
+                })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/projects" className="flex items-center gap-2 text-xs text-primary font-medium">
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    <span>Manage Projects</span>
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
 
