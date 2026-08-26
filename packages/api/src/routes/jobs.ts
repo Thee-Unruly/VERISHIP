@@ -139,7 +139,7 @@ export async function jobRoutes(fastify: FastifyInstance) {
     query += ` ORDER BY j.created_at DESC LIMIT 50`;
 
     const { rows } = await pool.query(query, params);
-    return reply.send({ jobs: rows });
+    return reply.send(rows);
   };
 
   fastify.get('/api/jobs', handleListJobs);

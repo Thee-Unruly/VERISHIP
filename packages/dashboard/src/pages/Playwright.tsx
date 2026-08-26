@@ -169,13 +169,15 @@ export default function PlaywrightPage() {
       const res = await fetch("/api/projects");
       if (res.ok) {
         const data = await res.json();
-        setProjects(data);
-        if (data.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(data[0].id);
+        const list = Array.isArray(data) ? data : Array.isArray(data?.projects) ? data.projects : [];
+        setProjects(list);
+        if (list.length > 0 && !selectedProjectId) {
+          setSelectedProjectId(list[0].id);
         }
       }
     } catch (err) {
       console.error("Failed to load projects", err);
+      setProjects([]);
     }
   };
 
@@ -185,10 +187,12 @@ export default function PlaywrightPage() {
       const res = await fetch("/api/jobs");
       if (res.ok) {
         const data = await res.json();
-        setRecentJobs(data);
+        const list = Array.isArray(data) ? data : Array.isArray(data?.jobs) ? data.jobs : [];
+        setRecentJobs(list);
       }
     } catch (err) {
       console.error("Failed to fetch jobs", err);
+      setRecentJobs([]);
     } finally {
       setRefreshing(false);
     }
@@ -199,9 +203,9 @@ export default function PlaywrightPage() {
       const res = await fetch(`/api/jobs/${jobId}`);
       if (res.ok) {
         const data = await res.json();
-        setActiveJob(data.job);
-        setActiveRun(data.run);
-        if (data.steps && data.steps.length > 0) {
+        setActiveJob(data.job || null);
+        setActiveRun(data.run || null);
+        if (data.steps && Array.isArray(data.steps)) {
           setSteps(data.steps);
         }
 
