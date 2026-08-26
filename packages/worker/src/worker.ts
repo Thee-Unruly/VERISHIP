@@ -216,21 +216,19 @@ AVAILABLE TOOLS:
         taxonomy = 'RECOVERED';
       }
     } catch (err: any) {
-      taxonomy = 'INFRA_ERROR';
-      failureReason = err?.message || 'Uncaught error in worker agent loop';
-      console.error(`[Worker] Run ${runId} threw error:`, err);
+      taxonomy = 'APP_DEFECT';
+      failureReason = err?.message || 'Verification or interaction step failed during test execution';
+      console.error(`[Worker] Step error during run ${runId}:`, err?.message || err);
     } finally {
       // 4. Guaranteed try/finally cleanup
       const durationMs = Date.now() - startTime;
       let traceUrl: string | undefined = undefined;
-      let videoFile: string | null = null;
+      let videoUrl: string | undefined = undefined;
 
+      let videoRef: any = null;
       if (page) {
         try {
-          const video = page.video();
-          if (video) {
-            videoFile = await video.path().catch(() => null);
-          }
+          videoRef = page.video();
         } catch (e) {}
       }
 
@@ -244,23 +242,54 @@ AVAILABLE TOOLS:
         }
       }
 
-      if (browser) {
-        await browser.close().catch(() => {});
+      // Close page and context first so Playwright finalizes writing the WebM video
+      if (page) {
+        await page.close().catch(() => {});
+      }
+      if (context) {
+        await context.close().catch(() => {});
       }
 
-      let videoUrl: string | undefined = undefined;
-      if (videoFile) {
+      if (videoRef) {
         try {
-          const fs = require('fs');
-          const path = require('path');
-          const targetPath = path.join(artifactWriter.getVideoDir(), 'video.webm');
-          if (fs.existsSync(videoFile)) {
-            fs.copyFileSync(videoFile, targetPath);
+          const videoFile = await videoRef.path().catch(() => null);
+          if (videoFile) {
+            const fs = require('fs');
+            const path = require('path');
+            const targetPath = path.join(artifactWriter.getVideoDir(), 'video.webm');
+            if (fs.existsSync(videoFile) && videoFile !== targetPath) {
+              fs.copyFileSync(videoFile, targetPath);
+            }
             videoUrl = `/artifacts/${runId}/video.webm`;
           }
         } catch (videoErr) {
-          console.error('[Worker] Error copying video:', videoErr);
+          console.error('[Worker] Error saving video:', videoErr);
         }
+      }
+
+      // Fallback: search artifact directory for any generated .webm file
+      if (!videoUrl) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const videoDir = artifactWriter.getVideoDir();
+          if (fs.existsSync(videoDir)) {
+            const files = fs.readdirSync(videoDir);
+            const webm = files.find((f: string) => f.endsWith('.webm'));
+            if (webm) {
+              const fullWebmPath = path.join(videoDir, webm);
+              const targetPath = path.join(videoDir, 'video.webm');
+              if (fullWebmPath !== targetPath) {
+                fs.copyFileSync(fullWebmPath, targetPath);
+              }
+              videoUrl = `/artifacts/${runId}/video.webm`;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (browser) {
+        await browser.close().catch(() => {});
       }
 
       // Generate copy-pasteable Playwright spec file from step history logs

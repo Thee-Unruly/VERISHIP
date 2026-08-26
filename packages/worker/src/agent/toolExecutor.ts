@@ -40,27 +40,51 @@ export class ToolExecutor {
   }
 
   private async navigateTo(url: string): Promise<ExecutionResult> {
-    await this.page.goto(url, { waitUntil: 'networkidle', timeout: 15000 });
-    return { success: true, message: `Navigated successfully to ${url}` };
+    try {
+      await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      return { success: true, message: `Navigated successfully to ${url}` };
+    } catch (err: any) {
+      return { success: false, message: `Navigation to ${url} failed or timed out: ${err?.message}` };
+    }
   }
 
   private async clickElement(role: string, name: string): Promise<ExecutionResult> {
     try {
-      await this.page.getByRole(role as any, { name, exact: false }).click({ timeout: 5000 });
-      return { success: true, message: `Clicked element with role '${role}' and name '${name}'` };
-    } catch {
-      // Alternate Recovery Strategy: Text-based locator fallback
-      await this.page.getByText(name, { exact: false }).click({ timeout: 5000 });
+      if (role && role.trim() !== '') {
+        await this.page.getByRole(role as any, { name, exact: false }).click({ timeout: 4000 });
+        return { success: true, message: `Clicked element with role '${role}' and name '${name}'` };
+      }
+    } catch {}
+
+    try {
+      // Alternate Recovery Strategy 1: Text-based locator
+      await this.page.getByText(name, { exact: false }).first().click({ timeout: 4000 });
       return {
         success: true,
         message: `Clicked element using alternate text fallback '${name}'`,
         recovered: true,
       };
+    } catch {}
+
+    try {
+      // Alternate Recovery Strategy 2: CSS locator for links, buttons, or inputs
+      const locator = this.page.locator(`a:has-text("${name}"), button:has-text("${name}"), [aria-label*="${name}" i], [title*="${name}" i]`).first();
+      await locator.click({ timeout: 4000 });
+      return {
+        success: true,
+        message: `Clicked element using CSS/aria fallback for '${name}'`,
+        recovered: true,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Unable to locate clickable element matching role '${role}' or name/text '${name}'. Target was not found or visible on page.`,
+      };
     }
   }
 
   private async fillInput(label: string, value: string): Promise<ExecutionResult> {
-    const cleanLabel = label.toLowerCase();
+    const cleanLabel = (label || '').toLowerCase();
     
     try {
       await this.page.getByLabel(label, { exact: false }).fill(value, { timeout: 3000 });
@@ -72,7 +96,6 @@ export class ToolExecutor {
       return { success: true, message: `Filled input via placeholder fallback '${label}'`, recovered: true };
     } catch {}
 
-    // Smart heuristic selector fallbacks for naked/unlabeled fields (e.g. Agile PMv2 login forms)
     try {
       if (cleanLabel.includes('email') || cleanLabel.includes('username') || cleanLabel.includes('user') || cleanLabel.includes('address')) {
         const emailInput = this.page.locator('input[type="email"], input[type="text"]').first();
@@ -93,34 +116,41 @@ export class ToolExecutor {
           recovered: true
         };
       }
-    } catch (err: any) {
-      throw new Error(`Failed to locate and fill input '${label}' via heuristic selectors: ${err?.message}`);
-    }
+    } catch {}
 
-    throw new Error(`Unable to locate input field matching label or placeholder '${label}'`);
+    return {
+      success: false,
+      message: `Unable to locate input field matching label, placeholder, or heuristic type for '${label}'`,
+    };
   }
 
   private async selectDropdown(label: string, option: string): Promise<ExecutionResult> {
-    const locator = this.page.getByLabel(label, { exact: false });
-    let isNativeSelect = false;
-
     try {
-      isNativeSelect = (await locator.evaluate((el) => el.tagName)) === 'SELECT';
-    } catch {
-      isNativeSelect = false;
-    }
+      const locator = this.page.getByLabel(label, { exact: false });
+      let isNativeSelect = false;
 
-    if (isNativeSelect) {
-      await locator.selectOption({ label: option });
-      return { success: true, message: `Selected option '${option}' in native select '${label}'` };
-    } else {
-      // ARIA Combobox Pattern: Click to open dropdown, then click option by role
-      await locator.click({ timeout: 5000 });
-      await this.page.getByRole('option', { name: option }).click({ timeout: 5000 });
+      try {
+        isNativeSelect = (await locator.evaluate((el) => el.tagName)) === 'SELECT';
+      } catch {
+        isNativeSelect = false;
+      }
+
+      if (isNativeSelect) {
+        await locator.selectOption({ label: option });
+        return { success: true, message: `Selected option '${option}' in native select '${label}'` };
+      } else {
+        await locator.click({ timeout: 4000 });
+        await this.page.getByRole('option', { name: option }).click({ timeout: 4000 });
+        return {
+          success: true,
+          message: `Selected option '${option}' in ARIA combobox '${label}'`,
+          recovered: true,
+        };
+      }
+    } catch (err: any) {
       return {
-        success: true,
-        message: `Selected option '${option}' in ARIA combobox '${label}'`,
-        recovered: true,
+        success: false,
+        message: `Failed to select option '${option}' in dropdown '${label}': ${err?.message}`,
       };
     }
   }
