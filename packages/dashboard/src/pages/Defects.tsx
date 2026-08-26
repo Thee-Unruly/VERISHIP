@@ -15,8 +15,8 @@ export default function Defects() {
   const [defects, setDefects] = useState([]);
   const [filteredDefects, setFilteredDefects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { projects, loading: projectsLoading, refresh } = useProjects();
-  const [selectedProject, setSelectedProject] = useState<number | "">("");
+  const { projects, loading: projectsLoading, refresh, selectedProjectId, setSelectedProjectId } = useProjects();
+  const selectedProject = selectedProjectId && selectedProjectId !== "all" ? Number(selectedProjectId) : (projects[0]?.id || "");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedDefect, setSelectedDefect] = useState<any>(null);

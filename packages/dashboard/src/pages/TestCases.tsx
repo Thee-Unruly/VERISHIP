@@ -21,8 +21,8 @@ export default function TestCases() {
   const [requirementsMap, setRequirementsMap] = useState<Record<number, string>>({});
   const [requirementTitleMap, setRequirementTitleMap] = useState<Record<string, number>>({});
   const [currentTab, setCurrentTab] = useState<"ongoing" | "retest" | "pass" | "fail">("ongoing");
-  const { projects, loading: projectsLoading, refresh } = useProjects();
-  const [selectedProject, setSelectedProject] = useState<number | "">("");
+  const { projects, loading: projectsLoading, refresh, selectedProjectId, setSelectedProjectId } = useProjects();
+  const selectedProject = selectedProjectId && selectedProjectId !== "all" ? Number(selectedProjectId) : (projects[0]?.id || "");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedTestCase, setSelectedTestCase] = useState<any>(null);

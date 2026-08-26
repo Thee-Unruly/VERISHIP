@@ -19,8 +19,8 @@ export default function Requirements() {
   const [requirements, setRequirements] = useState([]);
   const [filteredRequirements, setFilteredRequirements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { projects, loading: projectsLoading, refresh } = useProjects();
-  const [selectedProject, setSelectedProject] = useState<number | "">("");
+  const { projects, loading: projectsLoading, refresh, selectedProjectId, setSelectedProjectId } = useProjects();
+  const selectedProject = selectedProjectId && selectedProjectId !== "all" ? Number(selectedProjectId) : (projects[0]?.id || "");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedRequirement, setSelectedRequirement] = useState<any>(null);
@@ -54,11 +54,11 @@ export default function Requirements() {
 
     const token = localStorage.getItem("authToken");
     try {
-      const response = await fetch(`/api/requirements/${selectedProject}`, {
+      const response = await fetch(`/api/requirements?projectId=${selectedProject}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await response.json();
-      setRequirements(data);
+      setRequirements(Array.isArray(data) ? data : []);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching requirements:", error);
@@ -101,41 +101,9 @@ export default function Requirements() {
     return () => window.removeEventListener("globalSearch", handler as EventListener);
   }, [requirements]);
 
-  // Sync selected project when projects list changes
-  useEffect(() => {
-    try { console.debug("[Requirements] projects changed", projects); } catch (e) { }
-    if (!projects || projects.length === 0) {
-      setSelectedProject("");
-      return;
-    }
-    // If URL specifies a project name, prefer that
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const projectName = params.get("project");
-      if (projectName) {
-        const match = projects.find((p: any) => p.name === projectName || p.name === decodeURIComponent(projectName));
-        if (match) {
-          setSelectedProject(match.id);
-          return;
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    if (!projects.find((p: any) => p.id === selectedProject)) {
-      setSelectedProject(projects[0].id);
-    }
-  }, [projects]);
-
   // Ensure projects are fresh when this page mounts
   useEffect(() => {
-    try {
-      console.debug("[Requirements] calling refresh on mount");
-      refresh();
-    } catch (e) {
-      // ignore
-    }
+    refresh();
   }, []);
 
   const handleRefresh = async () => {

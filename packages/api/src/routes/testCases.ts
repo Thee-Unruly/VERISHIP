@@ -49,11 +49,13 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Get test case by ID
+  // Get test case by ID (or project test cases fallback)
   fastify.get('/api/test-cases/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { status } = request.query as { status?: string };
     const client = await pool.connect();
     try {
+      // First check if id is a test case ID
       const res = await client.query(
         `SELECT tc.*,
                 r.status as last_run_status,
@@ -63,10 +65,28 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
          WHERE tc.id = $1`,
         [id]
       );
-      if (res.rows.length === 0) {
-        return reply.status(404).send({ error: 'Test case not found' });
+      if (res.rows.length > 0) {
+        return reply.send(mapTestCaseRow(res.rows[0]));
       }
-      return reply.send(mapTestCaseRow(res.rows[0]));
+
+      // Fallback: check if id is a project_id
+      let query = `
+        SELECT tc.*,
+               r.status as last_run_status,
+               r.fitness_score as last_run_fitness
+        FROM test_cases tc
+        LEFT JOIN runs r ON tc.last_run_id = r.id
+        WHERE tc.project_id = $1
+      `;
+      const params: any[] = [id];
+      if (status) {
+        params.push(status);
+        query += ` AND tc.status = $${params.length}`;
+      }
+      query += ` ORDER BY tc.created_at DESC`;
+
+      const projRes = await client.query(query, params);
+      return reply.send(projRes.rows.map(mapTestCaseRow));
     } finally {
       client.release();
     }

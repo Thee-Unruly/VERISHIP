@@ -31,11 +31,12 @@ export async function requirementRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Get requirement by ID
+  // Get requirement by ID or project requirements fallback
   fastify.get('/api/requirements/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const client = await pool.connect();
     try {
+      // First check if id is a requirement ID
       const res = await client.query(
         `SELECT r.*,
                 (SELECT COUNT(*) FROM test_cases WHERE requirement_id = r.id)::int as test_case_count,
@@ -45,10 +46,22 @@ export async function requirementRoutes(fastify: FastifyInstance) {
          WHERE r.id = $1`,
         [id]
       );
-      if (res.rows.length === 0) {
-        return reply.status(404).send({ error: 'Requirement not found' });
+      if (res.rows.length > 0) {
+        return reply.send(mapRequirementRow(res.rows[0]));
       }
-      return reply.send(mapRequirementRow(res.rows[0]));
+
+      // Fallback: check if id is a project_id (e.g. /api/requirements/1)
+      const projRes = await client.query(
+        `SELECT r.*,
+                (SELECT COUNT(*) FROM test_cases WHERE requirement_id = r.id)::int as test_case_count,
+                (SELECT json_agg(json_build_object('id', ac.id, 'criteria', ac.criteria, 'isCovered', ac.is_covered))
+                 FROM acceptance_criteria ac WHERE ac.requirement_id = r.id) as acceptance_criteria
+         FROM requirements r
+         WHERE r.project_id = $1
+         ORDER BY r.created_at DESC`,
+        [id]
+      );
+      return reply.send(projRes.rows.map(mapRequirementRow));
     } finally {
       client.release();
     }

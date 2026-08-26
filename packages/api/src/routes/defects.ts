@@ -43,16 +43,20 @@ export async function defectRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Get defect by ID
+  // Get defect by ID (or project defects fallback)
   fastify.get('/api/defects/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const client = await pool.connect();
     try {
+      // First check if id is a defect ID
       const res = await client.query(`SELECT * FROM defects WHERE id = $1`, [id]);
-      if (res.rows.length === 0) {
-        return reply.status(404).send({ error: 'Defect not found' });
+      if (res.rows.length > 0) {
+        return reply.send(mapDefectRow(res.rows[0]));
       }
-      return reply.send(mapDefectRow(res.rows[0]));
+
+      // Fallback: check if id is a project_id
+      const projRes = await client.query(`SELECT * FROM defects WHERE project_id = $1 ORDER BY created_at DESC`, [id]);
+      return reply.send(projRes.rows.map(mapDefectRow));
     } finally {
       client.release();
     }
