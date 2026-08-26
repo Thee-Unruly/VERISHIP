@@ -215,4 +215,20 @@ export class AIService {
       suggestedFix: `Inspect locator selector resiliency and verify backend API latency or authentication state prior to action.`
     };
   }
+
+  static async chatWithQAAssistant(message: string, contextData: Record<string, any>): Promise<string> {
+    const systemPrompt = `You are VeriBot, the intelligent AI Quality & Governance Assistant for VeriShip.
+You have real-time access to the platform's current live state:
+${JSON.stringify(contextData, null, 2)}
+
+Provide clear, helpful, accurate, and concise markdown responses in plain English.
+If the user asks about defects, test runs, requirements, health scores, or release readiness, use the provided context data to give exact figures and helpful recommendations.`;
+
+    const raw = await this.completePrompt(systemPrompt, message);
+    if (raw && raw.trim().length > 0) {
+      return raw.trim();
+    }
+
+    return `Hello! I'm your VeriShip QA Assistant. We have ${contextData.projectsCount || 0} active project(s), ${contextData.testCasesCount || 0} test case(s), and ${contextData.defectsCount || 0} open defect(s). How can I assist you with your QA governance today?`;
+  }
 }

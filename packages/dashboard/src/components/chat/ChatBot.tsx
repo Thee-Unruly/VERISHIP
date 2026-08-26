@@ -60,38 +60,33 @@ export default function ChatBot() {
     setLoading(true);
 
     try {
-      const res = await fetch(N8N_WEBHOOK_URL, {
+      const res = await fetch("/api/copilot/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true"
         },
         body: JSON.stringify({
           message: text,
           sessionId,
-          user_id: JSON.parse(localStorage.getItem("user") || "{}")?.id || 0,
-          user_name: JSON.parse(localStorage.getItem("user") || "{}")?.username || "",
         }),
       });
-      const data = await res.json();
-      console.log("n8n Response:", data);
 
-      // Try every possible key that n8n/AI models use
+      if (!res.ok) {
+        throw new Error("Failed to get response");
+      }
+
+      const data = await res.json();
       const reply =
         data?.output ||
         data?.response ||
         data?.text ||
-        data?.[0]?.output ||
-        data?.[0]?.response ||
-        data?.[0]?.text ||
-        (typeof data === 'string' ? data : null) ||
-        `Unknown response format. Raw data: ${JSON.stringify(data).substring(0, 100)}...`;
+        (typeof data === "string" ? data : "Hello! How can I assist you with your QA governance today?");
 
       setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: "⚠️ Connection error. Please try again." },
+        { role: "assistant", text: "⚠️ VeriBot assistant encountered a network error. Please try again." },
       ]);
     } finally {
       setLoading(false);
