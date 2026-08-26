@@ -1,4 +1,4 @@
-import { useState, Dispatch, SetStateAction } from "react";
+import { useState, useEffect, Dispatch, SetStateAction } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -20,8 +20,18 @@ import {
   Globe,
   Zap,
   Bot,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface UserInfo {
+  id: number;
+  username: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  role: string;
+}
 
 const qaManagementNav = [
   { name: "Projects", href: "/projects", icon: FolderKanban },
@@ -48,7 +58,39 @@ interface AppSidebarProps {
 export function AppSidebar({ collapsed, setCollapsed }: AppSidebarProps) {
   const [qaManagementOpen, setQaManagementOpen] = useState(true);
   const [automatedTestingOpen, setAutomatedTestingOpen] = useState(true);
+  const [user, setUser] = useState<UserInfo | null>(null);
   const location = useLocation();
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        setUser(JSON.parse(userStr));
+      } catch (err) {
+        console.error("Error parsing user:", err);
+      }
+    }
+  }, []);
+
+  const displayName =
+    user && (user.first_name || user.last_name)
+      ? `${user.first_name || ""} ${user.last_name || ""}`.trim()
+      : user?.username || "Ibrahim Fadhili";
+
+  const initials =
+    displayName
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "IF";
+
+  const roleText =
+    user?.role === "admin"
+      ? "QA Lead • Admin"
+      : user?.role
+      ? `${user.role} • Workspace`
+      : "QA Lead • Enterprise";
 
   return (
     <aside
@@ -77,22 +119,37 @@ export function AppSidebar({ collapsed, setCollapsed }: AppSidebarProps) {
           )}
         </div>
 
-        {/* Organization Selector */}
-        {!collapsed && (
-          <div className="border-b border-sidebar-border p-4">
-            <button className="flex w-full items-center gap-3 rounded-lg bg-sidebar-accent p-2.5 text-left transition-colors hover:bg-sidebar-accent/80">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary/20">
-                <Building2 className="h-4 w-4 text-sidebar-primary" />
+        {/* User Profile / Role Card */}
+        {!collapsed ? (
+          <div className="border-b border-sidebar-border p-3">
+            <Link
+              to="/profile"
+              className="flex w-full items-center gap-3 rounded-lg bg-sidebar-accent/50 p-2 text-left transition-all hover:bg-sidebar-accent border border-sidebar-border/60 group"
+              title="View Profile Settings"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-accent text-accent-foreground font-bold text-xs shadow-sm flex-shrink-0">
+                {initials}
               </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="truncate text-sm font-medium text-sidebar-foreground">
-                  VeriShip Inc.
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-xs font-semibold text-sidebar-foreground group-hover:text-primary transition-colors">
+                  {displayName}
                 </p>
-                <p className="truncate text-xs text-sidebar-muted">
-                  Enterprise Plan
+                <p className="truncate text-[11px] text-sidebar-muted font-medium flex items-center gap-1.5 mt-0.5">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                  <span>{roleText}</span>
                 </p>
               </div>
-            </button>
+            </Link>
+          </div>
+        ) : (
+          <div className="border-b border-sidebar-border p-3 flex justify-center">
+            <Link
+              to="/profile"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-accent text-accent-foreground font-bold text-[11px] shadow-sm hover:scale-105 transition-transform"
+              title={`${displayName} (${roleText})`}
+            >
+              {initials}
+            </Link>
           </div>
         )}
 
