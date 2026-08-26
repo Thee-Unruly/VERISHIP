@@ -56,8 +56,10 @@ export async function requirementRoutes(fastify: FastifyInstance) {
 
   // Create requirement with automated AI clarity analysis
   fastify.post('/api/requirements', async (request, reply) => {
-    const body = request.body as CreateRequirementInput;
-    if (!body.projectId || !body.title) {
+    const body = request.body as any;
+    const projectId = body.projectId || body.project_id;
+    const title = body.title;
+    if (!projectId || !title) {
       return reply.status(400).send({ error: 'projectId and title are required' });
     }
 
@@ -65,7 +67,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
     const status = body.status || 'draft';
 
     // Perform AI clarity analysis
-    const analysis = await AIService.analyzeRequirementClarity(body.title, body.description || '');
+    const analysis = await AIService.analyzeRequirementClarity(title, body.description || '');
 
     const client = await pool.connect();
     try {
@@ -79,8 +81,8 @@ export async function requirementRoutes(fastify: FastifyInstance) {
          RETURNING *`,
         [
           id,
-          body.projectId,
-          body.title,
+          projectId,
+          title,
           body.description || null,
           status,
           analysis.clarityScore,

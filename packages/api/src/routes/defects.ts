@@ -60,19 +60,24 @@ export async function defectRoutes(fastify: FastifyInstance) {
 
   // Create defect
   fastify.post('/api/defects', async (request, reply) => {
-    const body = request.body as CreateDefectInput;
-    if (!body.projectId || !body.title) {
+    const body = request.body as any;
+    const projectId = body.projectId || body.project_id;
+    const title = body.title;
+    if (!projectId || !title) {
       return reply.status(400).send({ error: 'projectId and title are required' });
     }
 
     const id = `def_${crypto.randomUUID().slice(0, 8)}`;
     const severity = body.severity || 'medium';
+    const status = body.status || 'open';
+    const testCaseId = body.testCaseId || body.test_case_id || null;
+    const runId = body.runId || body.run_id || null;
 
     // AI Root Cause analysis if not provided
-    let rootCause = body.rootCauseAnalysis;
-    let suggestedFix = body.suggestedFix;
+    let rootCause = body.rootCauseAnalysis || body.root_cause_analysis;
+    let suggestedFix = body.suggestedFix || body.suggested_fix;
     if (!rootCause) {
-      const analysis = await AIService.analyzeDefectRootCause(body.title, body.description || '');
+      const analysis = await AIService.analyzeDefectRootCause(title, body.description || '');
       rootCause = analysis.rootCause;
       suggestedFix = analysis.suggestedFix;
     }
@@ -89,18 +94,18 @@ export async function defectRoutes(fastify: FastifyInstance) {
          RETURNING *`,
         [
           id,
-          body.projectId,
-          body.runId || null,
-          body.testCaseId || null,
-          body.title,
+          projectId,
+          runId,
+          testCaseId,
+          title,
           body.description || null,
           severity,
-          'open',
-          rootCause,
-          suggestedFix,
-          JSON.stringify(body.reproductionSteps || []),
-          body.screenshotUrl || null,
-          body.traceUrl || null,
+          status,
+          rootCause || null,
+          suggestedFix || null,
+          body.reproductionSteps || body.reproduction_steps || body.steps_to_reproduce || null,
+          body.screenshotUrl || body.screenshot_url || null,
+          body.traceUrl || body.trace_url || null,
         ]
       );
       return reply.status(201).send(mapDefectRow(res.rows[0]));

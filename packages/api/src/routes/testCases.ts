@@ -74,14 +74,20 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
 
   // Create test case
   fastify.post('/api/test-cases', async (request, reply) => {
-    const body = request.body as CreateTestCaseInput;
-    if (!body.projectId || !body.title) {
+    const body = request.body as any;
+    const projectId = body.projectId || body.project_id;
+    const title = body.title;
+    if (!projectId || !title) {
       return reply.status(400).send({ error: 'projectId and title are required' });
     }
 
     const id = `tc_${crypto.randomUUID().slice(0, 8)}`;
-    const testType = body.testType || 'autonomous-agent';
-    const status = 'ready';
+    const testType = body.testType || body.test_type || 'autonomous-agent';
+    const status = body.status || 'ready';
+    const requirementId = body.requirementId || body.requirement_id || null;
+    const suiteId = body.suiteId || body.suite_id || null;
+    const targetUrl = body.targetUrl || body.target_url || null;
+    const prompt = body.prompt || null;
 
     const client = await pool.connect();
     try {
@@ -94,15 +100,15 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
          RETURNING *`,
         [
           id,
-          body.projectId,
-          body.requirementId || null,
-          body.suiteId || null,
-          body.title,
+          projectId,
+          requirementId,
+          suiteId,
+          title,
           body.description || null,
           testType,
           status,
-          body.targetUrl || null,
-          body.prompt || null,
+          targetUrl,
+          prompt,
           JSON.stringify(body.steps || []),
         ]
       );
