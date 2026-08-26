@@ -23,7 +23,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <Header />
         <main className="p-6">{children}</main>
       </div>
-      <ChatBot />
+      {/* VeriBot QA Assistant frozen until n8n workflows are configured */}
+      {/* <ChatBot /> */}
     </div>
   );
 }
