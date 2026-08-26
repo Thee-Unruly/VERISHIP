@@ -16,9 +16,11 @@ COPY packages/dashboard ./packages/dashboard
 
 # Build shared and dashboard packages
 RUN npx tsc --project packages/shared/tsconfig.json
-RUN npx next build packages/dashboard
+RUN npm run build --workspace=@universal-qa/dashboard
 
 EXPOSE 3000
 
-ENV PORT 3000
-CMD ["npx", "next", "start", "packages/dashboard", "-p", "3000"]
+ENV PORT=3000
+ENV VITE_PORT=3000
+ENV VITE_API_PROXY_TARGET=http://api:4000
+CMD ["npm", "run", "preview", "--workspace=@universal-qa/dashboard"]
