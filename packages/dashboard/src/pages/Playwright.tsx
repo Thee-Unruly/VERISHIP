@@ -184,7 +184,10 @@ export default function PlaywrightPage() {
   const fetchRecentJobs = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch("/api/jobs");
+      const endpoint = selectedProjectId && selectedProjectId !== "all" 
+        ? `/api/jobs?projectId=${selectedProjectId}` 
+        : "/api/jobs";
+      const res = await fetch(endpoint);
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : Array.isArray(data?.jobs) ? data.jobs : [];
@@ -197,6 +200,10 @@ export default function PlaywrightPage() {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    fetchRecentJobs();
+  }, [selectedProjectId]);
 
   const fetchJobDetails = async (jobId: string) => {
     try {
