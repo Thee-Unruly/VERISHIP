@@ -10,7 +10,7 @@ export async function serviceAccountRoutes(fastify: FastifyInstance) {
       const res = await client.query(
         `SELECT id, name, description, role, is_active, created_at, last_used_at FROM service_accounts ORDER BY created_at DESC`
       );
-      return reply.send(res.rows.map(mapServiceAccountRow));
+      return reply.send(res.rows.map(r => mapServiceAccountRow(r)));
     } finally {
       client.release();
     }
