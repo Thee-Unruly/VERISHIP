@@ -2,6 +2,9 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import dotenv from 'dotenv';
 import { initDb } from './db';
+import { authRoutes } from './routes/auth';
+import { userRoutes } from './routes/users';
+import { metricRoutes } from './routes/metrics';
 import { jobRoutes } from './routes/jobs';
 import { templateRoutes } from './routes/templates';
 import { projectRoutes } from './routes/projects';
@@ -16,6 +19,7 @@ dotenv.config();
 
 const fastify = Fastify({
   logger: true,
+  ignoreTrailingSlash: true,
 });
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -30,6 +34,9 @@ async function start() {
     await initDb();
     
     // Register Unified VeriShip Governance & Execution Routes
+    await fastify.register(authRoutes);
+    await fastify.register(userRoutes);
+    await fastify.register(metricRoutes);
     await fastify.register(projectRoutes);
     await fastify.register(requirementRoutes);
     await fastify.register(testCaseRoutes);

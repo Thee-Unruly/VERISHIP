@@ -15,6 +15,34 @@ export async function initDb() {
   const client = await pool.connect();
   try {
     await client.query(`
+      -- Users & Authentication
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(64) PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        first_name VARCHAR(100),
+        last_name VARCHAR(100),
+        role VARCHAR(50) NOT NULL DEFAULT 'admin',
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP WITH TIME ZONE
+      );
+
+      CREATE TABLE IF NOT EXISTS user_project_assignment (
+        user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+        project_id VARCHAR(64) REFERENCES projects(id) ON DELETE CASCADE,
+        role VARCHAR(50) DEFAULT 'member',
+        PRIMARY KEY (user_id, project_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS settings (
+        id VARCHAR(64) PRIMARY KEY,
+        key VARCHAR(100) UNIQUE NOT NULL,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
       -- Core Projects & Workspaces
       CREATE TABLE IF NOT EXISTS projects (
         id VARCHAR(64) PRIMARY KEY,

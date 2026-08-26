@@ -145,6 +145,67 @@ export async function projectRoutes(fastify: FastifyInstance) {
       client.release();
     }
   });
+
+  // Project Team Members
+  fastify.get('/api/projects/:id/team', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const client = await pool.connect();
+    try {
+      const res = await client.query(
+        `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.role as system_role, upa.role as project_role
+         FROM user_project_assignment upa
+         JOIN users u ON upa.user_id = u.id
+         WHERE upa.project_id = $1`,
+        [id]
+      );
+      return reply.send(res.rows.map(r => ({
+        id: r.id,
+        name: [r.first_name, r.last_name].filter(Boolean).join(' ') || r.username,
+        email: r.email,
+        role: r.project_role || r.system_role || 'Developer',
+      })));
+    } finally {
+      client.release();
+    }
+  });
+
+  fastify.post('/api/projects/:id/team', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { userId?: string; name?: string; email?: string; role?: string };
+    const client = await pool.connect();
+    try {
+      let userId = body.userId;
+      if (!userId) {
+        const uRes = await client.query(`SELECT id FROM users LIMIT 1`);
+        userId = uRes.rows[0]?.id || 'usr_admin';
+      }
+
+      await client.query(
+        `INSERT INTO user_project_assignment (user_id, project_id, role)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, project_id) DO UPDATE SET role = $3`,
+        [userId, id, body.role || 'Developer']
+      );
+
+      return reply.status(201).send({ success: true, message: 'Team member added' });
+    } finally {
+      client.release();
+    }
+  });
+
+  fastify.delete('/api/projects/:id/team/:memberId', async (request, reply) => {
+    const { id, memberId } = request.params as { id: string; memberId: string };
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `DELETE FROM user_project_assignment WHERE project_id = $1 AND user_id = $2`,
+        [id, memberId]
+      );
+      return reply.send({ success: true, message: 'Team member removed' });
+    } finally {
+      client.release();
+    }
+  });
 }
 
 function mapProjectRow(row: any) {
