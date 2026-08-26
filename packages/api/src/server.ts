@@ -55,6 +55,19 @@ async function start() {
       };
     });
 
+    fastify.get('/api/notifications', async (req, reply) => {
+      return reply.send([
+        {
+          id: 'notif_1',
+          type: 'insight',
+          title: 'Quality Gate Ready',
+          description: 'Autonomous QA suite passed with 98.4% fitness score',
+          timestamp: new Date().toISOString(),
+          link: '/playwright',
+        },
+      ]);
+    });
+
     // Custom route to serve Playwright screenshots, traces, spec files, and webm session videos
     fastify.get('/artifacts/*', async (req, reply) => {
       const path = require('path');

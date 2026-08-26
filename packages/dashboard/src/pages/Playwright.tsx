@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Play,
-  Monitor,
   Loader2,
   FileDown,
   RefreshCw,
   Film,
-  Image as ImageIcon,
   Sparkles,
   Code,
   Brain,
@@ -15,7 +13,6 @@ import {
   Copy,
   Check,
   ShieldCheck,
-  ChevronRight,
   Clock,
   Layers,
   ArrowUpRight
@@ -28,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface StepLog {
   id?: string;
@@ -77,8 +74,6 @@ interface ProjectOption {
 }
 
 export default function PlaywrightPage() {
-  const { toast } = useToast();
-
   // Form State
   const [url, setUrl] = useState("https://demo.playwright.dev/todomvc");
   const [prompt, setPrompt] = useState(
@@ -253,20 +248,13 @@ export default function PlaywrightPage() {
   const handlePresetSelect = (presetUrl: string, presetPrompt: string) => {
     setUrl(presetUrl);
     setPrompt(presetPrompt);
-    toast({
-      title: "Preset Loaded",
-      description: "Verification scenario configuration updated.",
-    });
+    toast.info("Verification scenario preset loaded.");
   };
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim() || !prompt.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please provide both a target URL and verification goal.",
-        variant: "destructive",
-      });
+      toast.error("Please provide both a target URL and verification goal.");
       return;
     }
 
@@ -295,29 +283,17 @@ export default function PlaywrightPage() {
       if (!res.ok) {
         const errorMsg = data.reason || data.error || "Failed to initialize test execution";
         setError(errorMsg);
-        toast({
-          title: "Launch Blocked",
-          description: errorMsg,
-          variant: "destructive",
-        });
+        toast.error(errorMsg);
         return;
       }
 
-      toast({
-        title: "🚀 Autonomous Agent Launched",
-        description: `Job ID: ${data.jobId.slice(0, 12)}... is executing in BullMQ runner.`,
-      });
-
+      toast.success(`Autonomous Agent Launched (Job: ${data.jobId.slice(0, 10)}...)`);
       setActiveJobId(data.jobId);
       fetchRecentJobs();
     } catch (err: any) {
       const msg = err.message || "Network error launching test run";
       setError(msg);
-      toast({
-        title: "Execution Error",
-        description: msg,
-        variant: "destructive",
-      });
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -328,10 +304,7 @@ export default function PlaywrightPage() {
     navigator.clipboard.writeText(specCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    toast({
-      title: "Copied!",
-      description: "Playwright test script copied to clipboard.",
-    });
+    toast.success("Playwright test script copied to clipboard.");
   };
 
   return (
@@ -714,7 +687,7 @@ export default function PlaywrightPage() {
                 </Card>
               </div>
 
-              {/* Right Column: Artifacts & Inspectors (Video, Screenshot, Spec Code, Memory) */}
+              {/* Right Column: Artifacts & Inspectors (Video, Spec Code, Memory) */}
               <div className="lg:col-span-7">
                 <Card className="border-border/60 bg-card/60 backdrop-blur-md h-[560px] flex flex-col shadow-sm overflow-hidden">
                   <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
