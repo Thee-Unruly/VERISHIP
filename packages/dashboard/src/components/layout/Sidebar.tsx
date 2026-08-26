@@ -119,15 +119,12 @@ export function AppSidebar({ collapsed, setCollapsed }: AppSidebarProps) {
               </div>
               
               <div className="border-t border-sidebar-border pt-4 space-y-1">
-                <Link
-                  to="/copilot"
-                  className={cn(
-                    "nav-item justify-center",
-                    location.pathname === "/copilot" && "nav-item-active"
-                  )}
+                <div
+                  className="nav-item justify-center opacity-50 cursor-not-allowed pointer-events-none"
+                  title="Agent Copilot (Pending n8n configuration)"
                 >
-                  <Bot className="h-5 w-5 text-sidebar-primary" />
-                </Link>
+                  <Bot className="h-5 w-5 text-sidebar-muted" />
+                </div>
                 {adminNavigation.map((item) => {
                   const isActive = location.pathname === item.href;
                   return (
@@ -239,16 +236,18 @@ export function AppSidebar({ collapsed, setCollapsed }: AppSidebarProps) {
                   AI Assistant
                 </div>
                 <div className="space-y-1">
-                  <Link
-                    to="/copilot"
-                    className={cn(
-                      "nav-item w-full group",
-                      location.pathname === "/copilot" && "nav-item-active"
-                    )}
+                  <div
+                    className="nav-item w-full opacity-50 cursor-not-allowed select-none justify-between pointer-events-none"
+                    title="Agentic Copilot disabled (n8n configuration pending)"
                   >
-                    <Bot className="h-5 w-5 text-sidebar-primary" />
-                    <span className="text-sidebar-foreground">Agent Copilot</span>
-                  </Link>
+                    <div className="flex items-center gap-2">
+                      <Bot className="h-5 w-5 text-sidebar-muted" />
+                      <span className="text-sidebar-muted">Agent Copilot</span>
+                    </div>
+                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground border border-border">
+                      Pending n8n
+                    </span>
+                  </div>
                   <Link
                     to="/help/copilot"
                     className={cn(
