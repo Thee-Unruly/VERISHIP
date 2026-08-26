@@ -2,23 +2,28 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
 
 export async function metricRoutes(fastify: FastifyInstance) {
-  // Aggregate dashboard metrics
+  // Aggregate dashboard metrics (with optional projectId filter)
   fastify.get('/api/metrics/dashboard', async (request, reply) => {
+    const { projectId } = request.query as { projectId?: string };
     const client = await pool.connect();
     try {
+      const isFiltered = !!projectId && projectId !== 'all';
+      const projFilter = isFiltered ? 'WHERE project_id = $1' : '';
+      const params = isFiltered ? [projectId] : [];
+
       const [reqCount, tcCount, defCount, openDefCount, critDefCount, relCount, runStats] = await Promise.all([
-        client.query(`SELECT COUNT(*)::int as count FROM requirements`),
-        client.query(`SELECT COUNT(*)::int as count FROM test_cases`),
-        client.query(`SELECT COUNT(*)::int as count FROM defects`),
-        client.query(`SELECT COUNT(*)::int as count FROM defects WHERE status != 'resolved' AND status != 'closed'`),
-        client.query(`SELECT COUNT(*)::int as count FROM defects WHERE severity IN ('critical', 'high') AND status != 'resolved' AND status != 'closed'`),
-        client.query(`SELECT COUNT(*)::int as count FROM releases WHERE status IN ('planning', 'in-testing', 'ready')`),
+        client.query(`SELECT COUNT(*)::int as count FROM requirements ${projFilter}`, params),
+        client.query(`SELECT COUNT(*)::int as count FROM test_cases ${projFilter}`, params),
+        client.query(`SELECT COUNT(*)::int as count FROM defects ${projFilter}`, params),
+        client.query(`SELECT COUNT(*)::int as count FROM defects WHERE status != 'resolved' AND status != 'closed' ${isFiltered ? 'AND project_id = $1' : ''}`, params),
+        client.query(`SELECT COUNT(*)::int as count FROM defects WHERE severity IN ('critical', 'high') AND status != 'resolved' AND status != 'closed' ${isFiltered ? 'AND project_id = $1' : ''}`, params),
+        client.query(`SELECT COUNT(*)::int as count FROM releases WHERE status IN ('planning', 'in-testing', 'ready') ${isFiltered ? 'AND project_id = $1' : ''}`, params),
         client.query(`
           SELECT
             COUNT(*)::int as total_runs,
             COUNT(CASE WHEN status = 'passed' OR status = 'completed' THEN 1 END)::int as passed_runs
-          FROM runs
-        `),
+          FROM runs ${projFilter}
+        `, params),
       ]);
 
       const totalRuns = runStats.rows[0]?.total_runs || 0;
@@ -27,7 +32,7 @@ export async function metricRoutes(fastify: FastifyInstance) {
       const criticalDefects = critDefCount.rows[0]?.count || 0;
       const openDefects = openDefCount.rows[0]?.count || 0;
 
-      // Risk score: 0-100 (lower is better, or higher is safer depending on calculation)
+      // Risk score: 0-100
       const riskScore = Math.min(100, Math.max(0, criticalDefects * 15 + openDefects * 5));
       const totalRequirements = reqCount.rows[0]?.count || 0;
       const totalTestCases = tcCount.rows[0]?.count || 0;
@@ -49,10 +54,14 @@ export async function metricRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Recent activity feed
+  // Recent activity feed (with optional projectId filter)
   fastify.get('/api/metrics/activity', async (request, reply) => {
+    const { projectId } = request.query as { projectId?: string };
     const client = await pool.connect();
     try {
+      const isFiltered = !!projectId && projectId !== 'all';
+      const params = isFiltered ? [projectId] : [];
+
       const res = await client.query(`
         SELECT
           r.id::text as id,
@@ -62,6 +71,7 @@ export async function metricRoutes(fastify: FastifyInstance) {
           COALESCE(p.name, 'Default Project') as project_name
         FROM runs r
         LEFT JOIN projects p ON r.project_id = p.id
+        ${isFiltered ? 'WHERE r.project_id = $1' : ''}
         UNION ALL
         SELECT
           d.id::text as id,
@@ -71,6 +81,7 @@ export async function metricRoutes(fastify: FastifyInstance) {
           COALESCE(p.name, 'Default Project') as project_name
         FROM defects d
         LEFT JOIN projects p ON d.project_id = p.id
+        ${isFiltered ? 'WHERE d.project_id = $1' : ''}
         UNION ALL
         SELECT
           req.id::text as id,
@@ -80,9 +91,10 @@ export async function metricRoutes(fastify: FastifyInstance) {
           COALESCE(p.name, 'Default Project') as project_name
         FROM requirements req
         LEFT JOIN projects p ON req.project_id = p.id
+        ${isFiltered ? 'WHERE req.project_id = $1' : ''}
         ORDER BY timestamp DESC
         LIMIT 20
-      `);
+      `, params);
 
       return reply.send(res.rows);
     } finally {

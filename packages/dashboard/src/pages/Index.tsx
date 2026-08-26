@@ -5,7 +5,6 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { RiskGauge } from "@/components/dashboard/RiskGauge";
 import { ProjectCard } from "@/components/dashboard/ProjectCard";
 import { ReleaseApprovalCard } from "@/components/dashboard/ReleaseApprovalCard";
-// QualityTrendChart removed from dashboard for now
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { AIInsightsPanel } from "@/components/dashboard/AIInsightsPanel";
 import {
@@ -14,8 +13,23 @@ import {
   Bug,
   Rocket,
   RefreshCw,
+  FolderKanban,
+  Check,
+  ChevronDown,
+  Layers,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useProjects } from "@/context/ProjectsContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 interface Metrics {
   total_requirements: number;
@@ -70,6 +84,7 @@ interface ApproverData {
 }
 
 export default function Index() {
+  const { projects: contextProjects, selectedProjectId, setSelectedProjectId, selectedProject } = useProjects();
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -78,6 +93,8 @@ export default function Index() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [error, setError] = useState<string | null>(null);
+
+  const isAllProjects = !selectedProjectId || selectedProjectId === "all";
 
   const fetchData = async () => {
     setError(null);
@@ -89,6 +106,8 @@ export default function Index() {
     }
 
     try {
+      const projParam = selectedProjectId && selectedProjectId !== "all" ? `?projectId=${selectedProjectId}` : "";
+
       // Fetch projects
       const projectsRes = await fetch("/api/projects/", {
         headers: { "Authorization": `Bearer ${token}` }
@@ -96,13 +115,11 @@ export default function Index() {
       let projectsData: ProjectData[] = [];
       if (projectsRes.ok) {
         projectsData = await projectsRes.json();
-      } else {
-        setError("Failed to fetch projects: " + projectsRes.status);
       }
       setProjects(Array.isArray(projectsData) ? projectsData : []);
 
-      // Fetch metrics
-      const metricsRes = await fetch("/api/metrics/dashboard", {
+      // Fetch metrics (filtered by selected project)
+      const metricsRes = await fetch(`/api/metrics/dashboard${projParam}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (metricsRes.status === 401) {
@@ -113,26 +130,17 @@ export default function Index() {
       let metricsData: Metrics | null = null;
       if (metricsRes.ok) {
         metricsData = await metricsRes.json();
-      } else {
-        setError("Failed to fetch metrics: " + metricsRes.status);
       }
       setMetrics(metricsData);
 
-      // Fetch activity
+      // Fetch activity (filtered by selected project)
       try {
-        const activityRes = await fetch("/api/metrics/activity", {
+        const activityRes = await fetch(`/api/metrics/activity${projParam}`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
-        if (activityRes.status === 401) {
-          localStorage.removeItem("authToken");
-          window.location.href = "/login";
-          return;
-        }
         let activityData: any[] = [];
         if (activityRes.ok) {
           activityData = await activityRes.json();
-        } else {
-          setError("Failed to fetch activity: " + activityRes.status);
         }
         const transformedActivities = Array.isArray(activityData)
           ? activityData.map((act: any) => ({
@@ -147,7 +155,6 @@ export default function Index() {
           : [];
         setActivities(transformedActivities.slice(0, 5));
       } catch (err) {
-        setError("Error fetching activity");
         setActivities([]);
       }
 
@@ -159,16 +166,20 @@ export default function Index() {
         let releasesData: any[] = [];
         if (releasesRes.ok) {
           releasesData = await releasesRes.json();
-        } else {
-          setError("Failed to fetch releases: " + releasesRes.status);
         }
-        const pendingReleases = Array.isArray(releasesData)
-          ? releasesData.filter((r: any) => r.status !== "released").slice(0, 3)
+        let pendingReleases = Array.isArray(releasesData)
+          ? releasesData.filter((r: any) => r.status !== "released")
           : [];
-        setReleases(pendingReleases);
+
+        if (!isAllProjects && selectedProjectId) {
+          pendingReleases = pendingReleases.filter(
+            (r: any) => String(r.project_id) === String(selectedProjectId)
+          );
+        }
+        setReleases(pendingReleases.slice(0, 3));
 
         // Fetch approvals for each release
-        for (const release of pendingReleases) {
+        for (const release of pendingReleases.slice(0, 3)) {
           try {
             const approvalsRes = await fetch(`/api/releases/${release.id}/approvals`, {
               headers: { "Authorization": `Bearer ${token}` }
@@ -177,69 +188,155 @@ export default function Index() {
             if (approvalsRes.ok) {
               approvalsData = await approvalsRes.json();
             }
-            const transformedApprovals = Array.isArray(approvalsData)
-              ? approvalsData.map((approval: any) => ({
-                id: approval.id.toString(),
-                name: approval.approver_name,
-                role: approval.approver_role || "Team Member",
-                status: approval.status?.toLowerCase() as "approved" | "pending" | "rejected",
-                timestamp: approval.approved_at ? new Date(approval.approved_at).toLocaleString() : undefined,
-              }))
-              : [];
-            setReleaseApprovals(prev => ({
-              ...prev,
-              [release.id]: transformedApprovals
-            }));
+            if (Array.isArray(approvalsData)) {
+              setReleaseApprovals((prev) => ({
+                ...prev,
+                [release.id]: approvalsData,
+              }));
+            }
           } catch (err) {
-            // Ignore approval errors for now
+            // Ignore single approval fetch failures
           }
         }
       } catch (err) {
-        setError("Error fetching releases");
         setReleases([]);
       }
 
       setLastUpdated(new Date());
-      setLoading(false);
     } catch (err) {
-      setError("Error fetching data");
+      setError("An unexpected error occurred while fetching dashboard data.");
+    } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    setLoading(true);
     fetchData();
+  }, [selectedProjectId]);
 
-    // Auto-refresh once per day to avoid unnecessary LLM token usage
-    const DAILY_MS = 24 * 60 * 60 * 1000;
-    const interval = setInterval(fetchData, DAILY_MS);
-    return () => clearInterval(interval);
-  }, []);
+  if (loading) return (
+    <DashboardLayout>
+      <div className="p-8 flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+          <p className="text-sm">Loading project analytics...</p>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
 
-  if (loading) return <div className="p-6">Loading dashboard...</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
-  if (!metrics) return <div className="p-6 text-red-600">No metrics data available.</div>;
+  if (error) return (
+    <DashboardLayout>
+      <div className="p-8 text-destructive">{error}</div>
+    </DashboardLayout>
+  );
+
+  if (!metrics) return (
+    <DashboardLayout>
+      <div className="p-8 text-muted-foreground">No metrics data available.</div>
+    </DashboardLayout>
+  );
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
+        {/* Page Header with Project Filter Switcher */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/40 pb-5">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              Executive Quality Dashboard
-            </h1>
-            <p className="mt-1 text-muted-foreground">
-              Enterprise-wide quality intelligence and release governance
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Executive Quality Dashboard
+              </h1>
+              {!isAllProjects && selectedProject ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                  <FolderKanban className="h-3 w-3" />
+                  {selectedProject.name}
+                  <button
+                    onClick={() => setSelectedProjectId("all")}
+                    className="ml-1 hover:text-foreground text-primary/70 transition-colors"
+                    title="Clear filter & show all projects"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted text-muted-foreground border border-border">
+                  <Layers className="h-3 w-3" />
+                  All Projects ({projects.length})
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {!isAllProjects && selectedProject
+                ? `Filtered quality intelligence, defect density, and release readiness for "${selectedProject.name}"`
+                : `Enterprise-wide quality intelligence and release governance across all ${projects.length} active projects`}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground mt-1">
-              <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* On-Dashboard Project Selector */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2 bg-background shadow-sm border-border hover:border-primary/50 transition-colors">
+                  <FolderKanban className="h-4 w-4 text-primary" />
+                  <span className="max-w-[160px] truncate font-medium">
+                    {isAllProjects ? "All Projects" : selectedProject?.name || "Select Project"}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-60 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                  Filter Dashboard Analytics
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setSelectedProjectId("all")}
+                  className={cn(
+                    "flex items-center justify-between cursor-pointer py-2",
+                    isAllProjects && "bg-accent/15 font-semibold text-primary"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-muted-foreground" />
+                    <span>All Projects (Enterprise Overview)</span>
+                  </div>
+                  {isAllProjects && <Check className="h-4 w-4 text-primary ml-2" />}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {projects.map((proj) => {
+                  const isSelected = !isAllProjects && (proj.id === selectedProjectId || String(proj.id) === String(selectedProjectId));
+                  return (
+                    <DropdownMenuItem
+                      key={proj.id}
+                      onClick={() => setSelectedProjectId(proj.id)}
+                      className={cn(
+                        "flex items-center justify-between cursor-pointer py-2",
+                        isSelected && "bg-accent/15 font-semibold text-primary"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className={cn(
+                          "h-2 w-2 rounded-full flex-shrink-0",
+                          proj.status === "at-risk" || proj.status === "delayed" ? "bg-amber-500" : "bg-emerald-500"
+                        )} />
+                        <span className="truncate text-xs">{proj.name}</span>
+                      </div>
+                      {isSelected && <Check className="h-4 w-4 text-primary ml-2 flex-shrink-0" />}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               Last updated: {Math.round((Date.now() - lastUpdated.getTime()) / 1000)}s ago
             </div>
-            <Button onClick={() => { setLoading(true); fetchData(); }} variant="outline" size="sm">
-              <RefreshCw className="h-4 w-4 mr-2" />
+
+            <Button onClick={() => { setLoading(true); fetchData(); }} variant="ghost" size="sm">
+              <RefreshCw className="h-4 w-4 mr-1.5" />
               Refresh
             </Button>
           </div>
