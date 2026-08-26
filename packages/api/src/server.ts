@@ -4,6 +4,13 @@ import dotenv from 'dotenv';
 import { initDb } from './db';
 import { jobRoutes } from './routes/jobs';
 import { templateRoutes } from './routes/templates';
+import { projectRoutes } from './routes/projects';
+import { requirementRoutes } from './routes/requirements';
+import { testCaseRoutes } from './routes/testCases';
+import { defectRoutes } from './routes/defects';
+import { releaseRoutes } from './routes/releases';
+import { copilotRoutes } from './routes/copilot';
+import { serviceAccountRoutes } from './routes/serviceAccounts';
 
 dotenv.config();
 
@@ -17,23 +24,36 @@ async function start() {
   try {
     await fastify.register(cors, {
       origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     });
 
     await initDb();
+    
+    // Register Unified VeriShip Governance & Execution Routes
+    await fastify.register(projectRoutes);
+    await fastify.register(requirementRoutes);
+    await fastify.register(testCaseRoutes);
+    await fastify.register(defectRoutes);
+    await fastify.register(releaseRoutes);
+    await fastify.register(copilotRoutes);
+    await fastify.register(serviceAccountRoutes);
     await fastify.register(jobRoutes);
     await fastify.register(templateRoutes);
 
     fastify.get('/health', async () => {
-      return { status: 'ok', service: 'Universal Web Agent QA API Gateway v2' };
+      return {
+        status: 'ok',
+        service: 'VeriShip Quality Governance & Autonomous QA Platform v2',
+        timestamp: new Date().toISOString(),
+      };
     });
 
-    // Custom route to serve Playwright screenshots, traces, and webm session videos
+    // Custom route to serve Playwright screenshots, traces, spec files, and webm session videos
     fastify.get('/artifacts/*', async (req, reply) => {
       const path = require('path');
       const fs = require('fs');
       const paramPath = (req.params as any)['*'];
       
-      // Ensure we look at worker directory artifacts first or API directory artifacts
       const localPaths = [
         path.join(process.cwd(), 'artifacts', paramPath),
         path.join(process.cwd(), 'packages/worker/artifacts', paramPath),
@@ -45,6 +65,7 @@ async function start() {
           const mime = filePath.endsWith('.png') ? 'image/png' 
                      : filePath.endsWith('.webm') ? 'video/webm' 
                      : filePath.endsWith('.ts') ? 'text/plain; charset=utf-8'
+                     : filePath.endsWith('.zip') ? 'application/zip'
                      : 'application/octet-stream';
           reply.header('Content-Type', mime);
           return reply.send(fs.createReadStream(filePath));
@@ -55,7 +76,7 @@ async function start() {
     });
 
     await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`[API Gateway] Listening on http://localhost:${PORT}`);
+    console.log(`[VeriShip API Gateway] Listening on http://localhost:${PORT}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

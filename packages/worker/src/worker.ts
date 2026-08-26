@@ -2,6 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { realPreflight } from './preflight';
 import { createLLMAdapter, LLMMessage } from './llm/llmAdapter';
 import { trimContext } from './agent/contextManager';
@@ -35,7 +36,7 @@ const MAX_FULL_SNAPSHOTS = parseInt(process.env.MAX_FULL_SNAPSHOTS || '3', 10);
 const worker = new Worker(
   'qa-agent-jobs',
   async (job: Job) => {
-    const { jobId, runId, url, prompt } = job.data;
+    const { jobId, runId, url, prompt, projectId, testCaseId } = job.data;
     console.log(`[Worker] Starting job ${jobId} (Run: ${runId}) for URL: ${url}`);
 
     const startTime = Date.now();
@@ -65,7 +66,7 @@ const worker = new Worker(
       await context.tracing.start({ screenshots: true, snapshots: true });
       page = await context.newPage();
 
-      // 2. Real Preflight Check (Section 6)
+      // 2. Real Preflight Check
       console.log(`[Worker] Running preflight check on ${url}...`);
       const preflight = await realPreflight(page, url);
 
@@ -98,62 +99,64 @@ AVAILABLE TOOLS:
 2. "click_element": Click a button, link, or tab. Params: { "role": "string", "name": "string" }
 3. "fill_input": Type text into an input. Params: { "label": "string", "value": "string" }
 4. "select_dropdown": Choose an option. Params: { "label": "string", "option": "string" }
-5. "assert_condition": Assert text exists on page. Params: { "assertion_type": "text_exists" | "body_exists", "expected_value": "string" }
-6. "clear_session": Clear session cookies/storage to switch roles. Params: { "clear_cookies": boolean, "clear_storage": boolean }
-7. "switch_persona": Switch user role context (e.g. employee, approver). Params: { "persona_name": "string" }
-8. "finish_test": Complete test run. Params: { "summary": "string" }
+5. "assert_condition": Assert visual presence or text. Params: { "assertion_type": "string", "expected_value": "string" }
+6. "finish_test": Complete the test when goal is satisfied. Params: { "summary": "string" }`;
 
-Ensure the "name" property of "toolCall" matches exactly one of the tool names listed above. Do not output anything else besides valid JSON.`;
-
-      const messages: LLMMessage[] = [
-        {
-          role: 'system',
-          content: systemPrompt,
-        },
-        {
-          role: 'user',
-          content: `Begin QA test run on target URL: ${url}. Initial goal: "${prompt}".`,
-        },
-      ];
+      const messages: LLMMessage[] = [{ role: 'system', content: systemPrompt }];
 
       for (let step = 1; step <= MAX_STEPS; step++) {
         stepCount = step;
-        console.log(`[Worker] Executing step ${step}/${MAX_STEPS} for run ${runId}`);
+        console.log(`[Worker] Executing step ${step}/${MAX_STEPS} for run ${runId}...`);
 
-        // Capture step screenshot
-        const screenshotUrl = await artifactWriter.captureStepScreenshot(page, step);
-
-        // Fetch accessibility snapshot
-        const ariaSnapshot = await page.locator('body').innerText().catch(() => 'DOM content unavailable');
+        // Capture ARIA Snapshot from accessible tree
+        let snapshotText = '';
+        try {
+          snapshotText = await (page as any).accessibility?.snapshot({ interestingOnly: true })
+            ? JSON.stringify(await (page as any).accessibility.snapshot({ interestingOnly: true }))
+            : await page.evaluate(() => document.body.innerText.slice(0, 1000));
+        } catch (e) {
+          snapshotText = await page.evaluate(() => document.body.innerText.slice(0, 1000));
+        }
 
         messages.push({
           role: 'user',
-          content: `[Step ${step} Snapshot]\nAccessible DOM state:\n${ariaSnapshot.slice(0, 2000)}`,
+          content: `[Current Page URL: ${page.url()}]\n[DOM Snapshot]:\n${snapshotText}`,
           _type: 'snapshot',
           _step: step,
         });
 
-        // Apply rolling context window trimming (Section 5)
-        const prunedMessages = trimContext(messages, MAX_FULL_SNAPSHOTS);
+        // Apply rolling snapshot window to prevent unbounded context growth
+        const trimmedMessages = trimContext(messages, MAX_FULL_SNAPSHOTS);
 
-        // Query LLM Adapter with fallback handling (Section 7)
-        const llmResponse = await llmAdapter.complete(prunedMessages);
-        console.log(`[Worker] LLM Thought: ${llmResponse.thought}`);
+        // Call LLM through multi-provider adapter
+        const llmResponse = await llmAdapter.complete(trimmedMessages);
 
         if (!llmResponse.toolCall) {
-          throw new Error('LLM did not return a valid toolCall structure');
+          console.warn(`[Worker] Step ${step}: LLM provided no tool call. Defaulting to finish.`);
+          break;
         }
 
-        const { name: toolName, args: toolArgs } = llmResponse.toolCall;
+        const toolName = llmResponse.toolCall.name;
+        const toolArgs = llmResponse.toolCall.args;
+        const thought = llmResponse.thought;
 
-        // Execute tool call via contract executor (Section 4)
+        // Execute tool action with selector recovery & fallback
         const execResult = await toolExecutor.execute(toolName, toolArgs);
+
         if (execResult.recovered) {
           isRecovered = true;
         }
 
-        // Record Step Log to Postgres
-        const stepId = `step_${step}_${Date.now()}`;
+        // Capture Step Screenshot
+        let stepScreenshotUrl: string | undefined = undefined;
+        try {
+          stepScreenshotUrl = await artifactWriter.captureStepScreenshot(page, step);
+        } catch (screenshotErr) {
+          console.error('[Worker] Error capturing step screenshot:', screenshotErr);
+        }
+
+        // Record Step in Postgres
+        const stepId = `step_${runId}_${step}`;
         await pool.query(
           `INSERT INTO step_logs (id, run_id, step_number, action_taken, tool_call_name, tool_args, tool_result, screenshot_url)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -161,40 +164,41 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
             stepId,
             runId,
             step,
-            llmResponse.thought,
+            thought,
             toolName,
             JSON.stringify(toolArgs),
             execResult.message,
-            screenshotUrl,
+            stepScreenshotUrl || null,
           ]
         );
 
-        // Publish real-time step update to Redis pub/sub for the API Gateway
+        // Publish live SSE step update via Redis pub/sub
         await pubRedis.publish('job_updates', JSON.stringify({
           event: 'step_update',
           jobId,
-          step: {
-            id: stepId,
-            run_id: runId,
-            step_number: step,
-            action_taken: llmResponse.thought,
-            tool_call_name: toolName,
-            tool_args: toolArgs,
-            tool_result: execResult.message,
-            screenshot_url: screenshotUrl,
-            created_at: new Date().toISOString()
-          }
-        })).catch(err => console.error('[Worker] Redis publish step_update error:', err));
+          runId,
+          stepNumber: step,
+          thought,
+          toolName,
+          toolArgs,
+          toolResult: execResult.message,
+          screenshotUrl: stepScreenshotUrl,
+          success: execResult.success,
+        })).catch(err => console.error('[Worker] Redis publish error:', err));
 
-        messages[messages.length - 1]._action_taken = `${toolName}(${JSON.stringify(toolArgs)})`;
+        if (!execResult.success && !execResult.recovered) {
+          taxonomy = 'APP_DEFECT';
+          failureReason = `Action '${toolName}' failed at step ${step}: ${execResult.message}`;
+          console.warn(`[Worker] App defect detected: ${failureReason}`);
+          break;
+        }
 
-        // Feed the assistant's decision and the tool execution outcome back to the dialog history
         messages.push({
           role: 'assistant',
-          content: JSON.stringify({
-            thought: llmResponse.thought,
-            toolCall: llmResponse.toolCall
-          })
+          content: JSON.stringify(llmResponse),
+          _type: 'step',
+          _step: step,
+          _action_taken: thought,
         });
 
         messages.push({
@@ -216,7 +220,7 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
       failureReason = err?.message || 'Uncaught error in worker agent loop';
       console.error(`[Worker] Run ${runId} threw error:`, err);
     } finally {
-      // 4. Guaranteed try/finally cleanup (Section 8)
+      // 4. Guaranteed try/finally cleanup
       const durationMs = Date.now() - startTime;
       let traceUrl: string | undefined = undefined;
       let videoFile: string | null = null;
@@ -274,7 +278,7 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
         console.error('[Worker] Error generating spec file:', specErr);
       }
 
-      // Persist structured Run Memory for history / prompt memory retrieval
+      // Persist structured Run Memory
       try {
         const memoryRes = await pool.query(
           `SELECT step_number, tool_call_name, tool_args, tool_result FROM step_logs WHERE run_id = $1 ORDER BY step_number ASC`,
@@ -319,12 +323,11 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
         console.error('[Worker] Error writing run memory:', memErr);
       }
 
-      // Calculate Fitness Score (Percentage of successful steps vs total)
+      // Calculate Fitness Score
       const fitnessScore = taxonomy === 'PASSED' ? 100 : taxonomy === 'RECOVERED' ? 85 : taxonomy === 'APP_DEFECT' ? 30 : 0;
-
-      // Update Run & Job in Postgres
       const finalStatus = taxonomy === 'PASSED' || taxonomy === 'RECOVERED' ? 'completed' : 'failed';
 
+      // Update Run & Job in Postgres
       await pool.query(
         `UPDATE runs SET status = $1, taxonomy = $2, fitness_score = $3, total_steps = $4, duration_ms = $5, trace_url = $6, video_url = $7, spec_url = $8, completed_at = CURRENT_TIMESTAMP WHERE id = $9`,
         [finalStatus, taxonomy, fitnessScore, stepCount, durationMs, traceUrl, videoUrl || null, specUrl || null, runId]
@@ -335,10 +338,61 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
         [finalStatus, taxonomy, failureReason || null, jobId]
       );
 
+      // Link to Test Case & Auto-create Defect if APP_DEFECT
+      if (testCaseId) {
+        const tcStatus = finalStatus === 'completed' ? 'passed' : 'failed';
+        await pool.query(
+          `UPDATE test_cases SET status = $1, last_run_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+          [tcStatus, runId, testCaseId]
+        );
+      }
+
+      if (taxonomy === 'APP_DEFECT' && projectId) {
+        const defectId = `def_${crypto.randomUUID().slice(0, 8)}`;
+        const defectTitle = `Autonomous Verification Failed: ${prompt.slice(0, 80)}`;
+        const rootCause = failureReason || 'Visual assertion or element interaction failed during agent test run.';
+        const suggestedFix = 'Verify element locator accessibility attributes and validate target server response times.';
+
+        await pool.query(
+          `INSERT INTO defects (id, project_id, run_id, test_case_id, title, description, severity, status, root_cause_analysis, suggested_fix, trace_url)
+           VALUES ($1, $2, $3, $4, $5, $6, 'high', 'open', $7, $8, $9)`,
+          [
+            defectId,
+            projectId,
+            runId,
+            testCaseId || null,
+            defectTitle,
+            `Automated test failed at URL: ${url}. Failure Reason: ${failureReason}`,
+            rootCause,
+            suggestedFix,
+            traceUrl || null,
+          ]
+        );
+        console.log(`[Worker] Auto-logged defect ${defectId} for project ${projectId}.`);
+      }
+
+      // Update Project Health & Coverage
+      if (projectId) {
+        await pool.query(
+          `UPDATE projects
+           SET quality_coverage = (
+             SELECT COALESCE(ROUND((COUNT(CASE WHEN tc.status = 'passed' THEN 1 END)::numeric / NULLIF(COUNT(tc.id), 0)) * 100, 1), 0)
+             FROM test_cases tc WHERE tc.project_id = $1
+           ),
+           updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [projectId]
+        );
+      }
+
       // Publish real-time job completion update to Redis pub/sub for the API Gateway
       await pubRedis.publish('job_updates', JSON.stringify({
         event: 'job_completed',
-        jobId
+        jobId,
+        runId,
+        finalStatus,
+        taxonomy,
+        fitnessScore,
       })).catch(err => console.error('[Worker] Redis publish job_completed error:', err));
 
       console.log(`[Worker] Finished processing job ${jobId} with status ${finalStatus} (${taxonomy}) in ${durationMs}ms`);
@@ -350,4 +404,4 @@ Ensure the "name" property of "toolCall" matches exactly one of the tool names l
   }
 );
 
-console.log('[Worker Engine] BullMQ Worker started and waiting for QA jobs...');
+console.log('[VeriShip Worker Engine] BullMQ Worker started and waiting for QA jobs...');

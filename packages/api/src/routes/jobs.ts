@@ -37,9 +37,17 @@ redisSubscriber.on('message', (channel, message) => {
 });
 
 export async function jobRoutes(fastify: FastifyInstance) {
-  // POST /api/v1/jobs - Submit a new QA test job
-  fastify.post('/api/v1/jobs', async (req: FastifyRequest<{ Body: CreateJobInput }>, reply: FastifyReply) => {
-    const { url, prompt, workspaceId = 'default', priority = 'interactive' } = req.body || {};
+  // Handler for creating jobs
+  const handleCreateJob = async (req: FastifyRequest<{ Body: CreateJobInput }>, reply: FastifyReply) => {
+    const {
+      url,
+      prompt,
+      workspaceId = 'default',
+      projectId,
+      testCaseId,
+      priority = 'interactive',
+      maxSteps = 15,
+    } = req.body || {};
 
     if (!url || !prompt) {
       return reply.status(400).send({ error: 'Missing required parameters: url and prompt' });
@@ -59,14 +67,24 @@ export async function jobRoutes(fastify: FastifyInstance) {
 
     // 2. Durable Postgres Record
     await pool.query(
-      `INSERT INTO jobs (id, workspace_id, url, prompt, priority, status) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [jobId, workspaceId, url, prompt, priority, 'pending']
+      `INSERT INTO jobs (id, workspace_id, project_id, test_case_id, url, prompt, priority, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [jobId, workspaceId, projectId || null, testCaseId || null, url, prompt, priority, 'pending']
     );
 
     await pool.query(
-      `INSERT INTO runs (id, job_id, status) VALUES ($1, $2, $3)`,
-      [runId, jobId, 'running']
+      `INSERT INTO runs (id, job_id, project_id, test_case_id, status)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [runId, jobId, projectId || null, testCaseId || null, 'running']
     );
+
+    // If testCaseId is provided, link latest run
+    if (testCaseId) {
+      await pool.query(
+        `UPDATE test_cases SET last_run_id = $1, status = 'in-progress', updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [runId, testCaseId]
+      );
+    }
 
     // 3. Queue to BullMQ with Domain Grouping
     const domain = extractDomain(url);
@@ -78,7 +96,10 @@ export async function jobRoutes(fastify: FastifyInstance) {
         url,
         prompt,
         workspaceId,
+        projectId,
+        testCaseId,
         priority,
+        maxSteps,
       },
       {
         jobId,
@@ -93,23 +114,48 @@ export async function jobRoutes(fastify: FastifyInstance) {
       status: 'pending',
       message: 'Job submitted and queued successfully.',
     });
-  });
+  };
 
-  // GET /api/v1/jobs - List recent jobs
-  fastify.get('/api/v1/jobs', async (_req: FastifyRequest, reply: FastifyReply) => {
-    const { rows } = await pool.query(
-      `SELECT j.*, r.id as run_id, r.status as run_status, r.taxonomy, r.fitness_score, r.total_steps
-       FROM jobs j
-       LEFT JOIN runs r ON j.id = r.job_id
-       ORDER BY j.created_at DESC LIMIT 50`
-    );
+  // Register both /api/jobs and /api/v1/jobs
+  fastify.post('/api/jobs', handleCreateJob);
+  fastify.post('/api/v1/jobs', handleCreateJob);
+
+  // List recent jobs
+  const handleListJobs = async (req: FastifyRequest<{ Querystring: { projectId?: string } }>, reply: FastifyReply) => {
+    const { projectId } = req.query || {};
+    let query = `
+      SELECT j.*, r.id as run_id, r.status as run_status, r.taxonomy, r.fitness_score, r.total_steps,
+             p.name as project_name, tc.title as test_case_title
+      FROM jobs j
+      LEFT JOIN runs r ON j.id = r.job_id
+      LEFT JOIN projects p ON j.project_id = p.id
+      LEFT JOIN test_cases tc ON j.test_case_id = tc.id
+    `;
+    const params: any[] = [];
+    if (projectId) {
+      query += ` WHERE j.project_id = $1`;
+      params.push(projectId);
+    }
+    query += ` ORDER BY j.created_at DESC LIMIT 50`;
+
+    const { rows } = await pool.query(query, params);
     return reply.send({ jobs: rows });
-  });
+  };
 
-  // GET /api/v1/jobs/:id - Detailed job status & steps
-  fastify.get('/api/v1/jobs/:id', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.get('/api/jobs', handleListJobs);
+  fastify.get('/api/v1/jobs', handleListJobs);
+
+  // Detailed job status & steps
+  const handleGetJob = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = req.params;
-    const jobRes = await pool.query(`SELECT * FROM jobs WHERE id = $1`, [id]);
+    const jobRes = await pool.query(
+      `SELECT j.*, p.name as project_name, tc.title as test_case_title
+       FROM jobs j
+       LEFT JOIN projects p ON j.project_id = p.id
+       LEFT JOIN test_cases tc ON j.test_case_id = tc.id
+       WHERE j.id = $1`,
+      [id]
+    );
     if (jobRes.rowCount === 0) {
       return reply.status(404).send({ error: 'Job not found' });
     }
@@ -132,10 +178,13 @@ export async function jobRoutes(fastify: FastifyInstance) {
       run: latestRun,
       steps,
     });
-  });
+  };
 
-  // GET /api/v1/jobs/:id/stream - SSE Stream for Live Execution Steps
-  fastify.get('/api/v1/jobs/:id/stream', (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.get('/api/jobs/:id', handleGetJob);
+  fastify.get('/api/v1/jobs/:id', handleGetJob);
+
+  // SSE Stream for Live Execution Steps
+  const handleStreamJob = (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = req.params;
 
     reply.raw.setHeader('Content-Type', 'text/event-stream');
@@ -158,10 +207,13 @@ export async function jobRoutes(fastify: FastifyInstance) {
       jobEvents.removeListener('step_update', listener);
       jobEvents.removeListener('job_completed', listener);
     });
-  });
+  };
 
-  // GET /api/v1/jobs/:id/memory - Get structured run memory for a job
-  fastify.get('/api/v1/jobs/:id/memory', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.get('/api/jobs/:id/stream', handleStreamJob);
+  fastify.get('/api/v1/jobs/:id/stream', handleStreamJob);
+
+  // Get structured run memory for a job
+  fastify.get('/api/jobs/:id/memory', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = req.params;
     const runsRes = await pool.query(`SELECT id FROM runs WHERE job_id = $1 ORDER BY created_at DESC LIMIT 1`, [id]);
     if (runsRes.rowCount === 0) {
@@ -173,58 +225,6 @@ export async function jobRoutes(fastify: FastifyInstance) {
       jobId: id,
       runId,
       memory: memRes.rows[0] || null,
-    });
-  });
-
-  // POST /api/v1/jobs/:id/rerun - Re-trigger an existing job with its prompt & memory
-  fastify.post('/api/v1/jobs/:id/rerun', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const { id } = req.params;
-    const jobRes = await pool.query(`SELECT * FROM jobs WHERE id = $1`, [id]);
-    if (jobRes.rowCount === 0) {
-      return reply.status(404).send({ error: 'Job not found' });
-    }
-
-    const parentJob = jobRes.rows[0];
-    const guardCheck = await validateTargetUrl(parentJob.url);
-    if (!guardCheck.ok) {
-      return reply.status(400).send({ error: 'Ingress Guard URL Validation Failed', reason: guardCheck.reason });
-    }
-
-    const newJobId = `job_${uuidv4().replace(/-/g, '')}`;
-    const newRunId = `run_${uuidv4().replace(/-/g, '')}`;
-
-    await pool.query(
-      `INSERT INTO jobs (id, workspace_id, url, prompt, priority, status) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [newJobId, parentJob.workspace_id, parentJob.url, parentJob.prompt, 'interactive', 'pending']
-    );
-
-    await pool.query(
-      `INSERT INTO runs (id, job_id, status) VALUES ($1, $2, $3)`,
-      [newRunId, newJobId, 'running']
-    );
-
-    await qaJobQueue.add(
-      'execute-qa-run',
-      {
-        jobId: newJobId,
-        runId: newRunId,
-        url: parentJob.url,
-        prompt: parentJob.prompt,
-        workspaceId: parentJob.workspace_id,
-        priority: 'interactive',
-      },
-      {
-        jobId: newJobId,
-        priority: 1,
-      }
-    );
-
-    return reply.status(201).send({
-      success: true,
-      jobId: newJobId,
-      runId: newRunId,
-      parentJobId: id,
-      message: 'Job re-triggered successfully from history.',
     });
   });
 }

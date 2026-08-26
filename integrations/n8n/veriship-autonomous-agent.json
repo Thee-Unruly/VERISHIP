@@ -1,0 +1,39 @@
+{
+  "name": "Veriship Autonomous QA Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "veriship-agent",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-750, -280],
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.message }}",
+        "options": {
+          "systemMessage": "You are VeriShip Autonomous AI Quality Agent.\n\nYou interact with the VeriShip Quality Governance & Autonomous QA Platform via MCP tools.\n\nKey Capabilities:\n- Inspect and analyze requirements clarity\n- Auto-generate test cases & acceptance criteria\n- Trigger autonomous Playwright web agent test runs\n- Monitor test execution status, live video, and trace artifacts\n- Log and categorize defects with AI root-cause analysis\n- Calculate Release Gate readiness and GO/NO-GO release decisions."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [-420, -350],
+      "name": "AI Agent"
+    }
+  ],
+  "connections": {}
+}

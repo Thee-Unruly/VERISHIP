@@ -5,52 +5,71 @@ import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [url, setUrl] = useState('https://example.com');
-  const [prompt, setPrompt] = useState('Verify that the home page displays the standard header and main heading text.');
+  const [url, setUrl] = useState('https://demo.playwright.dev/todomvc');
+  const [prompt, setPrompt] = useState('Add two todos: "Buy groceries" and "Ship VeriShip QA", then mark the first as completed and assert 1 item remains active.');
   const [priority, setPriority] = useState('interactive');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentJobs, setRecentJobs] = useState<any[]>([]);
 
-  // Analytics State
+  // Platform Metrics State
   const [stats, setStats] = useState({
-    total: 0,
+    totalRuns: 0,
     passed: 0,
-    recovered: 0,
     defects: 0,
+    projectsCount: 0,
+    openDefects: 0,
   });
 
-  const fetchJobs = async () => {
+  const fetchOverviewData = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/v1/jobs');
-      if (res.ok) {
-        const data = await res.json();
-        const jobs = data.jobs || [];
-        setRecentJobs(jobs);
+      const [jobsRes, prjRes, defRes] = await Promise.all([
+        fetch('http://localhost:4000/api/jobs').catch(() => null),
+        fetch('http://localhost:4000/api/projects').catch(() => null),
+        fetch('http://localhost:4000/api/defects?status=open').catch(() => null),
+      ]);
 
-        let passed = 0;
-        let recovered = 0;
-        let defects = 0;
-        jobs.forEach((j: any) => {
-          if (j.taxonomy === 'PASSED') passed++;
-          else if (j.taxonomy === 'RECOVERED') recovered++;
-          else if (j.taxonomy === 'APP_DEFECT' || j.taxonomy === 'INFRA_ERROR') defects++;
-        });
-        setStats({
-          total: jobs.length,
-          passed,
-          recovered,
-          defects,
-        });
+      let jobs = [];
+      if (jobsRes && jobsRes.ok) {
+        const data = await jobsRes.json();
+        jobs = data.jobs || [];
+        setRecentJobs(jobs);
       }
+
+      let projectsCount = 0;
+      if (prjRes && prjRes.ok) {
+        const prjData = await prjRes.json();
+        projectsCount = prjData.length;
+      }
+
+      let openDefects = 0;
+      if (defRes && defRes.ok) {
+        const defData = await defRes.json();
+        openDefects = defData.length;
+      }
+
+      let passed = 0;
+      let defects = 0;
+      jobs.forEach((j: any) => {
+        if (j.taxonomy === 'PASSED' || j.taxonomy === 'RECOVERED') passed++;
+        else if (j.taxonomy === 'APP_DEFECT' || j.taxonomy === 'INFRA_ERROR') defects++;
+      });
+
+      setStats({
+        totalRuns: jobs.length,
+        passed,
+        defects,
+        projectsCount,
+        openDefects,
+      });
     } catch {
       // Backend offline
     }
   };
 
   useEffect(() => {
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 5000);
+    fetchOverviewData();
+    const interval = setInterval(fetchOverviewData, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -65,7 +84,7 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/jobs', {
+      const res = await fetch('http://localhost:4000/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, prompt, priority }),
@@ -87,243 +106,243 @@ export default function DashboardPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-      
-      {/* Analytics Counter Widgets */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
-        <div className="glow-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* KPI Widgets */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+        <div className="glow-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>TOTAL EXECUTIONS</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>ACTIVE PROJECTS</span>
+            <span style={{ fontSize: '1.2rem' }}>📁</span>
+          </div>
+          <span style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--accent-cyan)', lineHeight: 1 }}>{stats.projectsCount}</span>
+        </div>
+
+        <div className="glow-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>AGENT RUNS</span>
             <span style={{ fontSize: '1.2rem' }}>⚡</span>
           </div>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1 }}>{stats.total}</span>
+          <span style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1 }}>{stats.totalRuns}</span>
         </div>
 
-        <div className="glow-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div className="glow-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: 700, letterSpacing: '0.05em' }}>PASSED VERIFICATIONS</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>VERIFIED PASSES</span>
             <span style={{ fontSize: '1.2rem' }}>✅</span>
           </div>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: '#34d399', lineHeight: 1 }}>{stats.passed}</span>
+          <span style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--accent-emerald)', lineHeight: 1 }}>{stats.passed}</span>
         </div>
 
-        <div className="glow-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div className="glow-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700, letterSpacing: '0.05em' }}>RECOVERED RUNS</span>
-            <span style={{ fontSize: '1.2rem' }}>🔄</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>OPEN DEFECTS</span>
+            <span style={{ fontSize: '1.2rem' }}>🐛</span>
           </div>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: '#fbbf24', lineHeight: 1 }}>{stats.recovered}</span>
-        </div>
-
-        <div className="glow-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#fb7185', fontWeight: 700, letterSpacing: '0.05em' }}>DETECTED DEFECTS</span>
-            <span style={{ fontSize: '1.2rem' }}>🚨</span>
-          </div>
-          <span style={{ fontSize: '2.5rem', fontWeight: 800, color: '#fb7185', lineHeight: 1 }}>{stats.defects}</span>
+          <span style={{ fontSize: '2.2rem', fontWeight: 800, color: stats.openDefects > 0 ? 'var(--accent-rose)' : 'var(--accent-emerald)', lineHeight: 1 }}>
+            {stats.openDefects}
+          </span>
         </div>
       </div>
 
-      {/* Main Control Panel */}
+      {/* Quick Navigation Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+        <a href="/projects" style={{ textDecoration: 'none' }} className="glow-card">
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📁</div>
+          <h4 style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: '1rem' }}>Project Governance</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>Track coverage & release dates.</p>
+        </a>
+
+        <a href="/requirements" style={{ textDecoration: 'none' }} className="glow-card">
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🧠</div>
+          <h4 style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: '1rem' }}>Copilot QA</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>Requirement clarity scoring (0-100).</p>
+        </a>
+
+        <a href="/test-cases" style={{ textDecoration: 'none' }} className="glow-card">
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🧪</div>
+          <h4 style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: '1rem' }}>Test Repository</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>Automated & manual test suites.</p>
+        </a>
+
+        <a href="/defects" style={{ textDecoration: 'none' }} className="glow-card">
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🐛</div>
+          <h4 style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: '1rem' }}>Defect Hub</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>AI root-cause & fix suggestions.</p>
+        </a>
+
+        <a href="/releases" style={{ textDecoration: 'none' }} className="glow-card">
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🚀</div>
+          <h4 style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: '1rem' }}>Release Gates</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>GO/NO-GO readiness evaluation.</p>
+        </a>
+
+        <a href="/integrations" style={{ textDecoration: 'none' }} className="glow-card">
+          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🔌</div>
+          <h4 style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: '1rem' }}>MCP & n8n</h4>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '4px' }}>Connect external AI orchestrators.</p>
+        </a>
+      </div>
+
+      {/* Main Execution Launcher + Ingress Guard */}
       <div className="glow-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-          <div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>Launch Autonomous QA Run</h2>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Specify target web URL and natural language goal. Protected with SSRF & DNS Ingress Defense.
-            </p>
-          </div>
-        </div>
-
-        {/* Preset Prompt Shortcuts */}
         <div style={{ marginBottom: '24px' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', display: 'block', marginBottom: '10px' }}>
-            Quick Start Prompt Presets
-          </span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-            <button
-              type="button"
-              className="preset-pill"
-              onClick={() => handlePresetSelect(
-                'https://example-hr-app.demo.com/login',
-                'Navigate to login page. Switch persona to employee, fill username john.doe@company.com, fill password pass123, click Sign In. Click Request Leave, submit vacation form, assert submission success message. Execute clear_session. Switch persona to approver, login as manager@company.com, navigate to approvals, click Approve, assert Approved status.'
-              )}
-            >
-              🔄 Sequential Multi-Role Leave Approval
-            </button>
-
-            <button
-              type="button"
-              className="preset-pill"
-              onClick={() => handlePresetSelect(
-                'https://demo.ecom-store.com',
-                'Navigate to shop. Search for Wireless Headphones, click first product, click Add to Cart, proceed to Checkout, fill shipping address, place order, and assert Order Confirmed.'
-              )}
-            >
-              🛒 E-Commerce Checkout E2E Journey
-            </button>
-
-            <button
-              type="button"
-              className="preset-pill"
-              onClick={() => handlePresetSelect(
-                'https://example.com',
-                'Verify that the home page displays the standard header and main heading text.'
-              )}
-            >
-              🛡️ Quick Header Smoke Test
-            </button>
-          </div>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-main)' }}>
+            ⚡ Launch Autonomous Web Agent Run
+          </h2>
+          <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Protected by pre-queue <strong>Ingress Guard</strong> SSRF defense. Executed in disposable Playwright container with rolling ARIA snapshots.
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Preset Templates */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Presets:</span>
+          <button
+            type="button"
+            onClick={() => handlePresetSelect('https://demo.playwright.dev/todomvc', 'Add two todos: "Buy groceries" and "Ship VeriShip QA", then mark the first as completed and assert 1 item remains active.')}
+            className="status-pill"
+            style={{ cursor: 'pointer', background: 'rgba(56, 189, 248, 0.1)', color: 'var(--accent-cyan)' }}
+          >
+            TodoMVC Flow
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePresetSelect('https://the-internet.herokuapp.com/login', 'Fill username with "tomsmith" and password with "SuperSecretPassword!", click Login, and assert success message is visible.')}
+            className="status-pill"
+            style={{ cursor: 'pointer', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-violet)' }}
+          >
+            Auth Login Flow
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePresetSelect('https://the-internet.herokuapp.com/dropdown', 'Select option "Option 2" from the dropdown and assert Option 2 is selected.')}
+            className="status-pill"
+            style={{ cursor: 'pointer', background: 'rgba(192, 132, 252, 0.1)', color: 'var(--accent-purple)' }}
+          >
+            Dropdown Selection
+          </button>
+        </div>
+
+        {error && (
+          <div style={{
+            background: 'rgba(251, 113, 133, 0.15)',
+            border: '1px solid var(--accent-rose)',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            color: 'var(--accent-rose)',
+            fontSize: '0.9rem',
+            marginBottom: '20px'
+          }}>
+            <strong>Validation Error:</strong> {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Target Web Application URL
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+              Target Web Application URL *
             </label>
             <input
               type="url"
               required
-              className="glowing-input"
+              placeholder="https://example.com"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://target-app.com"
-              style={{ fontFamily: 'JetBrains Mono' }}
+              className="glowing-input"
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Natural Language Verification Goal
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+              Agent Goal & Test Assertion Prompt *
             </label>
             <textarea
+              rows={3}
               required
-              className="glowing-input"
-              rows={4}
+              placeholder="Describe the end-to-end user scenario and expected outcome..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe your testing sequence..."
+              className="glowing-input"
+              style={{ resize: 'vertical' }}
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Execution Mode
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                Priority:
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="glowing-input"
+                  style={{ padding: '6px 12px', width: 'auto', fontSize: '0.85rem' }}
+                >
+                  <option value="interactive">Interactive (Lane 1)</option>
+                  <option value="scheduled">Scheduled / Batch (Lane 2)</option>
+                </select>
               </label>
-              <select
-                className="glowing-input"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-              >
-                <option value="interactive">Interactive (Real-Time Container)</option>
-                <option value="scheduled">Batch (Background Execution)</option>
-              </select>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-              <button type="submit" className="glow-button" style={{ width: '100%' }} disabled={loading}>
-                {loading ? 'Initializing Agent Container...' : '🚀 Launch Autonomous QA Run'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="submit-button"
+              style={{ width: 'auto', padding: '12px 32px' }}
+            >
+              {loading ? 'Queuing Run...' : '⚡ Execute Live Web Agent'}
+            </button>
           </div>
-
-          {error && (
-            <div style={{
-              background: 'rgba(251, 113, 133, 0.12)',
-              border: '1px solid rgba(251, 113, 133, 0.3)',
-              color: '#fb7185',
-              padding: '16px 20px',
-              borderRadius: '14px',
-              fontSize: '0.9rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <span style={{ fontSize: '1.2rem' }}>🛑</span>
-              <div>
-                <strong>Ingress Protection Blocked Request:</strong> {error}
-              </div>
-            </div>
-          )}
         </form>
       </div>
 
-      {/* Recent Runs Table */}
+      {/* Recent Executions Stream */}
       <div className="glow-card">
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '24px', letterSpacing: '-0.02em' }}>Live Run Execution History</h2>
-        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>⚡ Recent Autonomous Executions</h3>
+          <a href="/runs" style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600 }}>
+            View All Runs →
+          </a>
+        </div>
+
         {recentJobs.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No executions loaded. Launch a new run above to begin live monitoring.
+          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            No recent executions logged. Launch your first run above!
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.95rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-normal)', color: 'var(--text-muted)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <th style={{ padding: '16px 20px' }}>Job ID</th>
-                  <th style={{ padding: '16px 20px' }}>Target Application</th>
-                  <th style={{ padding: '16px 20px' }}>Status</th>
-                  <th style={{ padding: '16px 20px' }}>Failure Taxonomy</th>
-                  <th style={{ padding: '16px 20px' }}>Fitness Score</th>
-                  <th style={{ padding: '16px 20px' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentJobs.map((job) => (
-                  <tr key={job.id} style={{ borderBottom: '1px solid var(--border-normal)', transition: 'background-color 0.2s' }}>
-                    <td style={{ padding: '18px 20px', fontFamily: 'JetBrains Mono', fontSize: '0.85rem', color: 'var(--accent-cyan)' }}>
-                      {job.id.slice(0, 16)}
-                    </td>
-                    <td style={{ padding: '18px 20px', fontWeight: 600, maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {job.url}
-                    </td>
-                    <td style={{ padding: '18px 20px' }}>
-                      <span className={`badge-label badge-${job.status}`}>
-                        {job.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '18px 20px' }}>
-                      {job.taxonomy ? (
-                        <span className={`badge-label badge-${job.taxonomy}`}>
-                          {job.taxonomy}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '18px 20px', fontWeight: 800, color: 'var(--accent-cyan)', fontSize: '1.05rem' }}>
-                      {job.fitness_score != null ? `${job.fitness_score}%` : 'N/A'}
-                    </td>
-                    <td style={{ padding: '18px 20px' }}>
-                      <a 
-                        href={`/runs/${job.id}`} 
-                        style={{ 
-                          color: 'var(--text-main)', 
-                          textDecoration: 'none', 
-                          fontWeight: 600,
-                          fontSize: '0.85rem',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          padding: '8px 16px',
-                          borderRadius: '10px',
-                          border: '1px solid var(--border-normal)',
-                          transition: 'all 0.2s',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        Monitor Run ➔
-                      </a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {recentJobs.slice(0, 5).map((job) => (
+              <div
+                key={job.id}
+                onClick={() => router.push(`/runs/${job.id}`)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 18px',
+                  borderRadius: '12px',
+                  background: 'rgba(0,0,0,0.25)',
+                  border: '1px solid var(--border-normal)',
+                  cursor: 'pointer',
+                  transition: 'border-color 0.2s',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                    {job.prompt.slice(0, 75)}...
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{job.url}</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span className={`status-pill status-${job.taxonomy === 'PASSED' ? 'passed' : job.taxonomy === 'APP_DEFECT' ? 'failed' : job.status === 'running' ? 'running' : 'pending'}`}>
+                    {job.taxonomy || job.status.toUpperCase()}
+                  </span>
+                  <span style={{ color: 'var(--accent-cyan)', fontSize: '0.85rem', fontWeight: 700 }}>→</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
-
     </div>
   );
 }
