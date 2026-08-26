@@ -13,6 +13,24 @@ export default defineConfig(() => ({
         target: process.env.VITE_API_PROXY_TARGET || "http://localhost:4000",
         changeOrigin: true,
       },
+      "/artifacts": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://localhost:4000",
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    host: "0.0.0.0",
+    port: parseInt(process.env.VITE_PORT || "3000"),
+    proxy: {
+      "/api": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://api:4000",
+        changeOrigin: true,
+      },
+      "/artifacts": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://api:4000",
+        changeOrigin: true,
+      },
     },
   },
   plugins: [react()],

@@ -638,7 +638,7 @@ export default function PlaywrightPage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column: Live Steps Stream */}
               <div className="lg:col-span-5 space-y-4">
-                <Card className="border-border/60 bg-card/60 backdrop-blur-md h-[560px] flex flex-col shadow-sm">
+                <Card className="border-border/60 bg-card/60 backdrop-blur-md min-h-[620px] h-[620px] flex flex-col shadow-sm">
                   <CardHeader className="py-3.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Layers className="w-4 h-4 text-primary" />
@@ -659,7 +659,7 @@ export default function PlaywrightPage() {
                       steps.map((s, idx) => (
                         <div
                           key={s.id || idx}
-                          className="p-3 rounded-lg border border-border/50 bg-background/60 hover:bg-background/90 transition-all space-y-1.5"
+                          className="p-3 rounded-lg border border-border/50 bg-background/60 hover:bg-background/90 transition-all space-y-2 shadow-sm"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
@@ -684,6 +684,27 @@ export default function PlaywrightPage() {
                               {JSON.stringify(s.tool_args)}
                             </div>
                           )}
+
+                          {s.screenshot_url && (
+                            <div className="pt-1.5 border-t border-border/30">
+                              <a
+                                href={s.screenshot_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="group relative block overflow-hidden rounded border border-border/60 bg-black/60 max-h-28"
+                              >
+                                <img
+                                  src={s.screenshot_url}
+                                  alt={`DOM step ${s.step_number}`}
+                                  className="w-full h-24 object-cover object-top group-hover:scale-105 transition-transform duration-200"
+                                  loading="lazy"
+                                />
+                                <span className="absolute bottom-1 right-1 bg-black/85 text-[9px] text-white px-1.5 py-0.5 rounded flex items-center gap-1 font-sans">
+                                  <ArrowUpRight className="w-2.5 h-2.5" /> View Screenshot
+                                </span>
+                              </a>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
@@ -693,20 +714,20 @@ export default function PlaywrightPage() {
 
               {/* Right Column: Artifacts & Inspectors (Video, Spec Code, Memory) */}
               <div className="lg:col-span-7">
-                <Card className="border-border/60 bg-card/60 backdrop-blur-md h-[560px] flex flex-col shadow-sm overflow-hidden">
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-                    <div className="px-4 pt-3 border-b border-border/40 flex items-center justify-between">
+                <Card className="border-border/60 bg-card/60 backdrop-blur-md min-h-[620px] h-[620px] flex flex-col shadow-sm overflow-hidden">
+                  <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col h-full">
+                    <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between bg-card/40">
                       <TabsList className="bg-secondary/50">
                         <TabsTrigger value="video" className="text-xs gap-1.5">
-                          <Film className="w-3.5 h-3.5" />
+                          <Film className="w-3.5 h-3.5 text-primary" />
                           Session Video
                         </TabsTrigger>
                         <TabsTrigger value="code" className="text-xs gap-1.5">
-                          <Code className="w-3.5 h-3.5" />
+                          <Code className="w-3.5 h-3.5 text-primary" />
                           Playwright Spec
                         </TabsTrigger>
                         <TabsTrigger value="memory" className="text-xs gap-1.5">
-                          <Brain className="w-3.5 h-3.5" />
+                          <Brain className="w-3.5 h-3.5 text-primary" />
                           Agent Memory
                         </TabsTrigger>
                       </TabsList>
@@ -716,7 +737,7 @@ export default function PlaywrightPage() {
                           variant="ghost"
                           size="sm"
                           onClick={copySpecToClipboard}
-                          className="h-7 text-xs gap-1"
+                          className="h-7 text-xs gap-1 hover:bg-primary/10"
                         >
                           {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                           {copied ? "Copied" : "Copy Code"}
@@ -725,31 +746,36 @@ export default function PlaywrightPage() {
                     </div>
 
                     {/* Tab 1: Video Player */}
-                    <TabsContent value="video" className="flex-1 p-4 m-0 flex flex-col justify-center items-center">
+                    <TabsContent value="video" className="flex-1 p-3 m-0 flex flex-col justify-between h-[calc(100%-48px)]">
                       {activeRun?.video_url ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center space-y-2">
-                          <div className="w-full flex-1 max-h-[420px] rounded-lg overflow-hidden border border-border/60 bg-black/90 flex items-center justify-center">
+                        <div className="w-full h-full flex flex-col justify-between space-y-2">
+                          <div className="w-full flex-1 min-h-[460px] rounded-lg overflow-hidden border border-border/60 bg-black flex items-center justify-center relative shadow-inner">
                             <video
+                              key={activeRun.video_url}
                               src={activeRun.video_url}
                               controls
                               autoPlay
-                              className="w-full h-full object-contain"
+                              playsInline
+                              className="w-full h-full object-contain max-h-[500px]"
                             />
                           </div>
-                          <div className="flex items-center justify-between w-full text-xs text-muted-foreground font-mono pt-1">
-                            <span>Format: WebM Video Session</span>
+                          <div className="flex items-center justify-between w-full text-xs text-muted-foreground font-mono px-1 pt-1">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                              Format: WebM Session Recording
+                            </span>
                             <a
                               href={activeRun.video_url}
-                              download
-                              className="text-primary hover:underline flex items-center gap-1"
+                              download="recording.webm"
+                              className="text-primary hover:underline flex items-center gap-1 font-medium"
                             >
-                              <FileDown className="w-3 h-3" />
+                              <FileDown className="w-3.5 h-3.5" />
                               Download Recording
                             </a>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center justify-center text-center p-8 space-y-3 text-muted-foreground">
+                        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 text-muted-foreground">
                           <Film className="w-12 h-12 stroke-[1.2] animate-pulse text-primary" />
                           <div className="space-y-1">
                             <p className="font-semibold text-foreground text-sm">Session Recording in Progress</p>
@@ -762,21 +788,24 @@ export default function PlaywrightPage() {
                     </TabsContent>
 
                     {/* Tab 2: Generated Playwright Spec Code */}
-                    <TabsContent value="code" className="flex-1 p-4 m-0 flex flex-col overflow-hidden">
+                    <TabsContent value="code" className="flex-1 p-3 m-0 flex flex-col justify-between h-[calc(100%-48px)] overflow-hidden">
                       {specCode ? (
                         <div className="w-full h-full flex flex-col space-y-2">
-                          <pre className="flex-1 p-4 rounded-lg bg-zinc-950 border border-border/60 text-zinc-100 font-mono text-xs overflow-auto leading-relaxed">
-                            {specCode}
+                          <pre className="flex-1 p-4 rounded-lg bg-zinc-950 border border-border/60 text-emerald-400 font-mono text-xs overflow-auto leading-relaxed shadow-inner selection:bg-primary selection:text-white">
+                            <code>{specCode}</code>
                           </pre>
-                          <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
-                            <span>Ready for CI/CD & Local Execution</span>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground font-mono px-1 pt-1">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full bg-primary" />
+                              Ready for CI/CD (`npx playwright test`)
+                            </span>
                             {activeRun?.spec_url && (
                               <a
                                 href={activeRun.spec_url}
                                 download="test.spec.ts"
-                                className="text-primary hover:underline flex items-center gap-1"
+                                className="text-primary hover:underline flex items-center gap-1 font-medium"
                               >
-                                <FileDown className="w-3 h-3" />
+                                <FileDown className="w-3.5 h-3.5" />
                                 Download .spec.ts
                               </a>
                             )}
@@ -796,8 +825,8 @@ export default function PlaywrightPage() {
                     </TabsContent>
 
                     {/* Tab 3: Agent Memory & Assertions */}
-                    <TabsContent value="memory" className="flex-1 p-4 m-0 overflow-y-auto space-y-4">
-                      <div className="p-3.5 rounded-lg border border-border/60 bg-background/60 space-y-1.5">
+                    <TabsContent value="memory" className="flex-1 p-3 m-0 overflow-y-auto space-y-3.5 h-[calc(100%-48px)]">
+                      <div className="p-3.5 rounded-lg border border-border/60 bg-background/60 space-y-1.5 shadow-sm">
                         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                           Structured Execution Summary
                         </span>
@@ -806,7 +835,7 @@ export default function PlaywrightPage() {
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         {/* Passed Assertions */}
                         <div className="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 space-y-2">
                           <div className="flex items-center gap-1.5 text-emerald-500 text-xs font-bold">
@@ -817,7 +846,7 @@ export default function PlaywrightPage() {
                             <ul className="space-y-1 text-xs text-foreground font-sans">
                               {memoryData.passed_assertions.map((a: string, i: number) => (
                                 <li key={i} className="flex items-start gap-1.5">
-                                  <span className="text-emerald-500">•</span>
+                                  <span className="text-emerald-500 font-bold">•</span>
                                   <span>{a}</span>
                                 </li>
                               ))}
@@ -837,7 +866,7 @@ export default function PlaywrightPage() {
                             <ul className="space-y-1 text-xs text-destructive font-sans">
                               {memoryData.failed_assertions.map((a: string, i: number) => (
                                 <li key={i} className="flex items-start gap-1.5">
-                                  <span>•</span>
+                                  <span className="font-bold">•</span>
                                   <span>{a}</span>
                                 </li>
                               ))}
@@ -849,9 +878,9 @@ export default function PlaywrightPage() {
                       </div>
 
                       {/* DOM Selector Cache */}
-                      <div className="p-3.5 rounded-lg border border-border/60 bg-zinc-950 text-zinc-300 space-y-1.5 font-mono text-xs">
+                      <div className="p-3.5 rounded-lg border border-border/60 bg-zinc-950 text-zinc-300 space-y-1.5 font-mono text-xs shadow-inner">
                         <span className="text-xs font-bold text-primary">DOM SELECTOR CACHE & HEURISTICS</span>
-                        <pre className="overflow-x-auto text-[11px] text-muted-foreground">
+                        <pre className="overflow-x-auto text-[11px] text-muted-foreground max-h-48">
                           {JSON.stringify(memoryData?.selector_cache || {}, null, 2)}
                         </pre>
                       </div>
