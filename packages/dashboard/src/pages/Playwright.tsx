@@ -1,735 +1,978 @@
-import { useState, useEffect } from "react";
-import { Play, Monitor, Loader2, Camera, FileDown, RefreshCw, StopCircle, Eye, EyeOff, Film, Image, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Play,
+  Monitor,
+  Loader2,
+  FileDown,
+  RefreshCw,
+  Film,
+  Image as ImageIcon,
+  Sparkles,
+  Code,
+  Brain,
+  CheckCircle2,
+  XCircle,
+  Copy,
+  Check,
+  ShieldCheck,
+  ChevronRight,
+  Clock,
+  Layers,
+  ArrowUpRight
+} from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import {
-    ConfigCard,
-    EmptyState,
-    LoadingState,
-    StepResult,
-    ToggleOption,
-} from "@/components/test-runner";
 
-// Animation variants
-const cardVariants = {
-    hidden: { opacity: 0, y: 30 },
-    visible: {
-        opacity: 1,
-        y: 0,
-        transition: { duration: 0.5 }
-    }
-};
+interface StepLog {
+  id?: string;
+  step_number: number;
+  action_taken: string;
+  tool_call_name: string;
+  tool_args: any;
+  tool_result: string;
+  screenshot_url?: string;
+  duration_ms?: number;
+  created_at?: string;
+}
 
-const resultsVariants = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: {
-        opacity: 1,
-        scale: 1,
-        transition: {
-            duration: 0.4,
-            staggerChildren: 0.08
+interface RunDetails {
+  id: string;
+  job_id: string;
+  status: string;
+  taxonomy?: string;
+  fitness_score?: number;
+  total_steps?: number;
+  duration_ms?: number;
+  trace_url?: string;
+  video_url?: string;
+  spec_url?: string;
+  screenshot_url?: string;
+  created_at?: string;
+  completed_at?: string;
+}
+
+interface JobItem {
+  id: string;
+  url: string;
+  prompt: string;
+  status: string;
+  priority?: string;
+  taxonomy?: string;
+  fitness_score?: number;
+  project_id?: string;
+  project_name?: string;
+  created_at: string;
+}
+
+interface ProjectOption {
+  id: string;
+  name: string;
+}
+
+export default function PlaywrightPage() {
+  const { toast } = useToast();
+
+  // Form State
+  const [url, setUrl] = useState("https://demo.playwright.dev/todomvc");
+  const [prompt, setPrompt] = useState(
+    "Add 3 todos: 'Verify login flow', 'Test checkout process', and 'Check defect dashboard'. Mark the second todo as completed, filter by Active, and assert that only 2 items remain."
+  );
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [priority, setPriority] = useState<string>("interactive");
+  const [headless, setHeadless] = useState<boolean>(true);
+  const [browserType, setBrowserType] = useState<string>("chromium");
+
+  // Projects list
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+
+  // Execution & Live Stream State
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<JobItem | null>(null);
+  const [activeRun, setActiveRun] = useState<RunDetails | null>(null);
+  const [steps, setSteps] = useState<StepLog[]>([]);
+  const [activeTab, setActiveTab] = useState<string>("video");
+  const [specCode, setSpecCode] = useState<string | null>(null);
+  const [memoryData, setMemoryData] = useState<any>(null);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  // History state
+  const [recentJobs, setRecentJobs] = useState<JobItem[]>([]);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Fetch projects and job history on mount
+  useEffect(() => {
+    fetchProjects();
+    fetchRecentJobs();
+  }, []);
+
+  // Poll / Stream active job updates
+  useEffect(() => {
+    if (!activeJobId) return;
+
+    fetchJobDetails(activeJobId);
+
+    // Setup SSE connection for real-time live events
+    const sseUrl = `/api/jobs/${activeJobId}/stream`;
+    try {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      const es = new EventSource(sseUrl);
+      eventSourceRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === "step_update" && data.step) {
+            setSteps((prev) => {
+              const exists = prev.some((s) => s.step_number === data.step.step_number);
+              if (exists) return prev;
+              return [...prev, data.step];
+            });
+            fetchJobDetails(activeJobId);
+          } else if (data.event === "job_completed") {
+            fetchJobDetails(activeJobId);
+          }
+        } catch (e) {
+          console.error("SSE parse error", e);
         }
+      };
+
+      es.onerror = () => {
+        es.close();
+      };
+    } catch (err) {
+      console.warn("SSE not available, falling back to polling", err);
     }
-};
 
-const itemVariants = {
-    hidden: { opacity: 0, x: -20 },
-    visible: {
-        opacity: 1,
-        x: 0,
-        transition: { duration: 0.3 }
+    // Polling fallback
+    const interval = setInterval(() => {
+      fetchJobDetails(activeJobId);
+    }, 2500);
+
+    return () => {
+      clearInterval(interval);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, [activeJobId]);
+
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch("/api/projects");
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data);
+        if (data.length > 0 && !selectedProjectId) {
+          setSelectedProjectId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load projects", err);
     }
-};
+  };
 
-// Types
-interface PlaywrightExecutionConfig {
-    browser_type: "chromium" | "firefox" | "webkit";
-    headless: boolean;
-    viewport: { width: number; height: number };
-    timeout: number;
-    base_url: string;
-    record_trace: boolean;
-    record_video: boolean;
-    screenshot_on_failure: boolean;
-    retry_count: number;
-    environment: string;
-}
+  const fetchRecentJobs = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/jobs");
+      if (res.ok) {
+        const data = await res.json();
+        setRecentJobs(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch jobs", err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-interface PlaywrightStepResult {
-    step_number: number;
-    action_type: string;
-    description: string;
-    selector: string | null;
-    status: "passed" | "failed" | "skipped";
-    duration_ms: number;
-    timestamp: string;
-    value?: any;
-    error?: string;
-    screenshot_path?: string;
-}
+  const fetchJobDetails = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setActiveJob(data.job);
+        setActiveRun(data.run);
+        if (data.steps && data.steps.length > 0) {
+          setSteps(data.steps);
+        }
 
-interface PlaywrightExecutionResponse {
-    execution_id: number;
-    test_case_id: number;
-    status: string;
-    start_time: string;
-    end_time: string | null;
-    duration_ms: number;
-    steps: PlaywrightStepResult[];
-    error_message?: string;
-    screenshot_path?: string;
-    trace_path?: string;
-    network_logs_count: number;
-    browser_type: string;
-    environment: string;
-    defect_id?: number;
-}
+        // If spec_url is present, fetch raw script content
+        if (data.run?.spec_url) {
+          fetchSpecCode(data.run.spec_url);
+        }
 
-interface PlaywrightRunnerStatus {
-    is_running: boolean;
-    browser_type: string | null;
-    contexts_count: number;
-    active_executions_count: number;
-    queued_executions_count: number;
-}
+        // Fetch memory if completed
+        if (data.job?.status === "completed" || data.job?.status === "failed") {
+          fetchJobMemory(jobId);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch job details", err);
+    }
+  };
 
-export default function Playwright() {
-    const { toast } = useToast();
+  const fetchSpecCode = async (specUrl: string) => {
+    try {
+      const fullUrl = specUrl.startsWith("http") ? specUrl : specUrl;
+      const res = await fetch(fullUrl);
+      if (res.ok) {
+        const code = await res.text();
+        setSpecCode(code);
+      }
+    } catch (e) {
+      console.error("Failed to fetch spec code", e);
+    }
+  };
 
-    // Playwright State
-    const [playwrightConfig, setPlaywrightConfig] = useState<PlaywrightExecutionConfig>({
-        browser_type: "chromium",
-        headless: true,
-        viewport: { width: 1280, height: 720 },
-        timeout: 30000,
-        base_url: "http://localhost:8000",
-        record_trace: true,
-        record_video: false,
-        screenshot_on_failure: true,
-        retry_count: 0,
-        environment: "development",
+  const fetchJobMemory = async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/memory`);
+      if (res.ok) {
+        const data = await res.json();
+        setMemoryData(data.memory);
+      }
+    } catch (e) {
+      console.error("Failed to fetch job memory", e);
+    }
+  };
+
+  const handlePresetSelect = (presetUrl: string, presetPrompt: string) => {
+    setUrl(presetUrl);
+    setPrompt(presetPrompt);
+    toast({
+      title: "Preset Loaded",
+      description: "Verification scenario configuration updated.",
     });
-    const [playwrightResult, setPlaywrightResult] = useState<PlaywrightExecutionResponse | null>(null);
-    const [playwrightStatus, setPlaywrightStatus] = useState<PlaywrightRunnerStatus | null>(null);
-    const [isPlaywrightRunning, setIsPlaywrightRunning] = useState(false);
-    const [manualInput, setManualInput] = useState<string>("");
-    const [isManualRunning, setIsManualRunning] = useState(false);
-    const [draftPrompt, setDraftPrompt] = useState("");
-    const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  };
 
-    useEffect(() => {
-        fetchPlaywrightStatus();
-    }, []);
+  const handleLaunch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url.trim() || !prompt.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please provide both a target URL and verification goal.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const fetchPlaywrightStatus = async () => {
-        try {
-            const response = await fetch("/api/automation/status");
-            if (response.ok) {
-                const data = await response.json();
-                setPlaywrightStatus(data);
-            }
-        } catch (error) {
-            console.error("Error fetching Playwright status:", error);
-        }
-    };
+    setLoading(true);
+    setError(null);
+    setSteps([]);
+    setSpecCode(null);
+    setMemoryData(null);
 
-    const generateDraftJson = async () => {
-        if (!draftPrompt.trim()) {
-            toast({
-                title: "No requirement provided",
-                description: "Describe the feature, user flow, or requirement first",
-                variant: "destructive",
-            });
-            return;
-        }
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: url.trim(),
+          prompt: prompt.trim(),
+          projectId: selectedProjectId || undefined,
+          priority,
+          headless,
+          browserType,
+        }),
+      });
 
-        setIsGeneratingDraft(true);
+      const data = await res.json();
 
-        try {
-            const response = await fetch("/api/ai/generate-playwright-json", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    test_description: draftPrompt,
-                    context: `Application under test base URL: ${playwrightConfig.base_url}. Environment: ${playwrightConfig.environment}. Browser: ${playwrightConfig.browser_type}.`,
-                }),
-            });
+      if (!res.ok) {
+        const errorMsg = data.reason || data.error || "Failed to initialize test execution";
+        setError(errorMsg);
+        toast({
+          title: "Launch Blocked",
+          description: errorMsg,
+          variant: "destructive",
+        });
+        return;
+      }
 
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.detail || "Failed to generate Playwright JSON");
-            }
+      toast({
+        title: "🚀 Autonomous Agent Launched",
+        description: `Job ID: ${data.jobId.slice(0, 12)}... is executing in BullMQ runner.`,
+      });
 
-            setManualInput(JSON.stringify({
-                title: data.title,
-                description: data.description,
-                steps: data.steps,
-            }, null, 2));
+      setActiveJobId(data.jobId);
+      fetchRecentJobs();
+    } catch (err: any) {
+      const msg = err.message || "Network error launching test run";
+      setError(msg);
+      toast({
+        title: "Execution Error",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            toast({
-                title: "Draft generated",
-                description: `${Array.isArray(data.steps) ? data.steps.length : 0} Playwright steps generated for review`,
-            });
-        } catch (error: any) {
-            toast({
-                title: "Generation Error",
-                description: error.message || "Failed to generate Playwright JSON",
-                variant: "destructive",
-            });
-        } finally {
-            setIsGeneratingDraft(false);
-        }
-    };
+  const copySpecToClipboard = () => {
+    if (!specCode) return;
+    navigator.clipboard.writeText(specCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({
+      title: "Copied!",
+      description: "Playwright test script copied to clipboard.",
+    });
+  };
 
-    const loadManualSample = () => {
-        const sample = {
-            steps: [
-                { type: "navigate", url: "/login", description: "Open login page" },
-                { type: "fill", selector: "#username", value: "testuser" },
-                { type: "fill", selector: "#password", value: "password" },
-                { type: "click", selector: "button[type=\"submit\"]" },
-                { type: "assert", selector: "#dashboard", expected_contains: "Welcome" }
-            ]
-        };
-
-        setManualInput(JSON.stringify(sample, null, 2));
-        toast({ title: "Sample loaded", description: "Manual login steps ready" });
-    };
-
-    const runManualTest = async () => {
-        if (!manualInput) {
-            toast({ title: "No steps", description: "Paste manual test steps as JSON", variant: "destructive" });
-            return;
-        }
-
-        let parsed: any;
-        try {
-            parsed = JSON.parse(manualInput);
-        } catch (e: any) {
-            toast({ title: "Invalid JSON", description: e.message || "Cannot parse JSON", variant: "destructive" });
-            return;
-        }
-
-        const steps = parsed.steps && Array.isArray(parsed.steps) ? parsed.steps : (Array.isArray(parsed) ? parsed : []);
-        if (!steps.length) {
-            toast({ title: "No steps found", description: "Provide an array of steps or an object with a 'steps' array", variant: "destructive" });
-            return;
-        }
-
-        setIsManualRunning(true);
-        setPlaywrightResult(null);
-
-        try {
-            const body = {
-                title: parsed.title || "Generated Playwright Test",
-                description: parsed.description || draftPrompt || "Ad-hoc Playwright execution",
-                config: playwrightConfig,
-                steps,
-            };
-            const response = await fetch("/api/automation/execute/manual", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-            });
-
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.detail || "Execution failed");
-            }
-
-            const data: PlaywrightExecutionResponse = await response.json();
-            setPlaywrightResult(data);
-
-            toast({
-                title: data.status === "passed" ? "Test Passed ✓" : "Test Failed",
-                description: `Completed in ${(data.duration_ms / 1000).toFixed(1)}s`,
-                variant: data.status === "passed" ? "default" : "destructive",
-            });
-        } catch (error: any) {
-            toast({ title: "Execution Error", description: error.message || "Failed to execute test", variant: "destructive" });
-        } finally {
-            setIsManualRunning(false);
-            fetchPlaywrightStatus();
-        }
-    };
-
-    const stopExecution = async () => {
-        if (!playwrightResult?.execution_id) return;
-        try {
-            await fetch(`/api/automation/executions/${playwrightResult.execution_id}`, {
-                method: "DELETE",
-            });
-            toast({ title: "Execution stopped", description: "Test was cancelled" });
-        } catch (error) {
-            console.error("Error stopping execution:", error);
-        }
-    };
-
-    const downloadTrace = () => {
-        if (!playwrightResult?.execution_id) return;
-        window.open(
-            `/api/automation/executions/${playwrightResult.execution_id}/trace?download=true`,
-            "_blank"
-        );
-    };
-
-    const downloadScreenshot = () => {
-        if (!playwrightResult?.execution_id) return;
-        window.open(
-            `/api/automation/executions/${playwrightResult.execution_id}/screenshot?download=true`,
-            "_blank"
-        );
-    };
-
-    return (
-        <DashboardLayout>
-            <div className="space-y-8 p-6 max-w-7xl mx-auto">
-                {/* Header */}
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                >
-                    <div>
-                        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent">
-                            Playwright Automation
-                        </h1>
-                        <p className="text-muted-foreground mt-2 text-lg">
-                            Browser automation for end-to-end testing with traces and screenshots
-                        </p>
-                    </div>
-                </motion.div>
-
-                {/* Content */}
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: 0.2 }}
-                >
-                    <div className="grid gap-8 lg:grid-cols-2">
-                        {/* Configuration */}
-                        <motion.div variants={cardVariants}>
-                            <ConfigCard
-                                icon={Monitor}
-                                title="Playwright Configuration"
-                                description="Configure browser automation for E2E testing"
-                            >
-                                {/* Status Badge */}
-                                {playwrightStatus && (
-                                    <motion.div
-                                        className="flex items-center justify-between p-4 rounded-xl bg-muted/30 border border-border/50"
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <motion.div
-                                                className={`w-2.5 h-2.5 rounded-full ${playwrightStatus.is_running ? 'bg-emerald-500' : 'bg-muted-foreground'}`}
-                                                animate={playwrightStatus.is_running ? { scale: [1, 1.2, 1] } : {}}
-                                                transition={{ duration: 1, repeat: Infinity }}
-                                            />
-                                            <span className="text-sm font-medium">Runner Status</span>
-                                        </div>
-                                        <Badge variant={playwrightStatus.is_running ? "default" : "secondary"}>
-                                            {playwrightStatus.is_running ? "Active" : "Idle"}
-                                        </Badge>
-                                    </motion.div>
-                                )}
-
-                                {/* Browser Selection */}
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">Browser</Label>
-                                    <Select
-                                        value={playwrightConfig.browser_type}
-                                        onValueChange={(value: "chromium" | "firefox" | "webkit") =>
-                                            setPlaywrightConfig({ ...playwrightConfig, browser_type: value })
-                                        }
-                                    >
-                                        <SelectTrigger className="h-10 rounded-lg border-border/50">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-card border-border/50 rounded-xl">
-                                            <SelectItem value="chromium">Chromium</SelectItem>
-                                            <SelectItem value="firefox">Firefox</SelectItem>
-                                            <SelectItem value="webkit">WebKit (Safari)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {/* Viewport */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-medium">Width</Label>
-                                        <Input
-                                            type="number"
-                                            value={playwrightConfig.viewport.width}
-                                            onChange={(e) =>
-                                                setPlaywrightConfig({
-                                                    ...playwrightConfig,
-                                                    viewport: { ...playwrightConfig.viewport, width: parseInt(e.target.value) || 1280 },
-                                                })
-                                            }
-                                            className="h-10 rounded-lg border-border/50"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-medium">Height</Label>
-                                        <Input
-                                            type="number"
-                                            value={playwrightConfig.viewport.height}
-                                            onChange={(e) =>
-                                                setPlaywrightConfig({
-                                                    ...playwrightConfig,
-                                                    viewport: { ...playwrightConfig.viewport, height: parseInt(e.target.value) || 720 },
-                                                })
-                                            }
-                                            className="h-10 rounded-lg border-border/50"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Base URL & Timeout */}
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">Base URL</Label>
-                                    <Input
-                                        value={playwrightConfig.base_url}
-                                        onChange={(e) => setPlaywrightConfig({ ...playwrightConfig, base_url: e.target.value })}
-                                        placeholder="http://localhost:3000"
-                                        className="h-10 rounded-lg border-border/50 font-mono text-sm"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">Timeout (ms)</Label>
-                                    <Input
-                                        type="number"
-                                        value={playwrightConfig.timeout}
-                                        onChange={(e) =>
-                                            setPlaywrightConfig({ ...playwrightConfig, timeout: parseInt(e.target.value) || 30000 })
-                                        }
-                                        className="h-10 rounded-lg border-border/50"
-                                    />
-                                </div>
-
-                                {/* Environment */}
-                                <div className="space-y-2">
-                                    <Label className="text-sm font-medium">Environment</Label>
-                                    <Select
-                                        value={playwrightConfig.environment}
-                                        onValueChange={(value) => setPlaywrightConfig({ ...playwrightConfig, environment: value })}
-                                    >
-                                        <SelectTrigger className="h-10 rounded-lg border-border/50">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-card border-border/50 rounded-xl">
-                                            <SelectItem value="development">Development</SelectItem>
-                                            <SelectItem value="staging">Staging</SelectItem>
-                                            <SelectItem value="production">Production</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {/* Toggle Options */}
-                                <div className="space-y-2 pt-4 border-t border-border/50">
-                                    <ToggleOption
-                                        id="headless"
-                                        label="Headless Mode"
-                                        description="Run without visible browser window"
-                                        checked={playwrightConfig.headless}
-                                        onCheckedChange={(checked) => setPlaywrightConfig({ ...playwrightConfig, headless: checked })}
-                                        icon={playwrightConfig.headless ? EyeOff : Eye}
-                                    />
-                                    <ToggleOption
-                                        id="trace"
-                                        label="Record Trace"
-                                        description="Capture detailed execution trace"
-                                        checked={playwrightConfig.record_trace}
-                                        onCheckedChange={(checked) => setPlaywrightConfig({ ...playwrightConfig, record_trace: checked })}
-                                        icon={FileDown}
-                                    />
-                                    <ToggleOption
-                                        id="video"
-                                        label="Record Video"
-                                        description="Capture video of test execution"
-                                        checked={playwrightConfig.record_video}
-                                        onCheckedChange={(checked) => setPlaywrightConfig({ ...playwrightConfig, record_video: checked })}
-                                        icon={Film}
-                                    />
-                                    <ToggleOption
-                                        id="screenshot"
-                                        label="Screenshot on Failure"
-                                        description="Capture screenshot when test fails"
-                                        checked={playwrightConfig.screenshot_on_failure}
-                                        onCheckedChange={(checked) => setPlaywrightConfig({ ...playwrightConfig, screenshot_on_failure: checked })}
-                                        icon={Image}
-                                    />
-                                </div>
-
-                                {/* AI Draft Generation */}
-                                <div className="pt-4 border-t border-border/50 space-y-4">
-                                    <Label className="text-base font-semibold">AI Draft Generator</Label>
-                                    <Textarea
-                                        value={draftPrompt}
-                                        onChange={(e) => setDraftPrompt(e.target.value)}
-                                        placeholder="Paste a requirement, describe a user flow, or explain the feature you want to automate. Example: User logs in, opens the projects dashboard, filters by status, and verifies only active projects remain visible."
-                                        className="min-h-[140px] rounded-xl border-border/50"
-                                    />
-                                    <Button
-                                        onClick={generateDraftJson}
-                                        disabled={isGeneratingDraft}
-                                        className="w-full h-10 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white rounded-xl"
-                                    >
-                                        {isGeneratingDraft ? (
-                                            <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Generating Draft...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Sparkles className="mr-2 h-4 w-4" />
-                                                Generate Playwright JSON
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-
-                                {/* Generated / Editable Steps JSON */}
-                                <div className="pt-4 border-t border-border/50 space-y-2">
-                                    <Label className="text-base font-semibold">Generated / Editable Steps JSON</Label>
-                                    <Textarea
-                                        value={manualInput}
-                                        onChange={(e) => setManualInput(e.target.value)}
-                                        placeholder='{ "title": "Login flow", "steps": [ { "type": "navigate", "url": "/login" } ] }'
-                                        className="h-40 font-mono text-sm"
-                                    />
-                                    <div className="flex gap-2">
-                                        <Button onClick={loadManualSample} variant="ghost" size="sm" className="rounded-lg">
-                                            Load Sample
-                                        </Button>
-                                        <Button
-                                            onClick={runManualTest}
-                                            disabled={isManualRunning}
-                                            className="ml-auto h-10 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl"
-                                        >
-                                            {isManualRunning ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                    Running...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Play className="mr-2 h-4 w-4" />
-                                                    Run Manual Test
-                                                </>
-                                            )}
-                                        </Button>
-                                    </div>
-                                </div>
-
-                            </ConfigCard>
-                        </motion.div>
-
-                        {/* Results */}
-                        <motion.div variants={cardVariants}>
-                            <ConfigCard
-                                icon={Monitor}
-                                title="Execution Results"
-                                description="Browser automation results with traces and screenshots"
-                            >
-                                <AnimatePresence mode="wait">
-                                    {isPlaywrightRunning && (
-                                        <motion.div
-                                            key="loading"
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            exit={{ opacity: 0, scale: 0.9 }}
-                                        >
-                                            <LoadingState
-                                                icon={Monitor}
-                                                message="Running browser automation..."
-                                                subMessage="Executing test steps in the browser"
-                                            />
-                                        </motion.div>
-                                    )}
-
-                                    {!isPlaywrightRunning && !playwrightResult && (
-                                        <motion.div
-                                            key="empty"
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            exit={{ opacity: 0 }}
-                                        >
-                                            <EmptyState
-                                                icon={Monitor}
-                                                title="No results yet"
-                                                description="Generate Playwright JSON from a requirement, review it, then run the draft"
-                                            />
-                                        </motion.div>
-                                    )}
-
-                                    {playwrightResult && (
-                                        <motion.div
-                                            key="results"
-                                            variants={resultsVariants}
-                                            initial="hidden"
-                                            animate="visible"
-                                            className="space-y-6"
-                                        >
-                                            {/* Status Header */}
-                                            <motion.div
-                                                variants={itemVariants}
-                                                className={`flex items-center justify-between p-5 rounded-xl border ${playwrightResult.status === "passed"
-                                                    ? "bg-emerald-500/5 border-emerald-500/20"
-                                                    : "bg-rose-500/5 border-rose-500/20"
-                                                    }`}
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <motion.div
-                                                        className={`p-3 rounded-xl ${playwrightResult.status === "passed"
-                                                            ? "bg-emerald-500/20"
-                                                            : "bg-rose-500/20"
-                                                            }`}
-                                                        initial={{ scale: 0 }}
-                                                        animate={{ scale: 1 }}
-                                                        transition={{ type: "spring", stiffness: 500, delay: 0.2 }}
-                                                    >
-                                                        {playwrightResult.status === "passed" ? (
-                                                            <Play className="h-6 w-6 text-emerald-500" />
-                                                        ) : (
-                                                            <StopCircle className="h-6 w-6 text-rose-500" />
-                                                        )}
-                                                    </motion.div>
-                                                    <div>
-                                                        <div className={`font-semibold text-lg ${playwrightResult.status === "passed" ? "text-emerald-600" : "text-rose-600"
-                                                            }`}>
-                                                            {playwrightResult.status === "passed" ? "Test Passed" : "Test Failed"}
-                                                        </div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            Execution #{playwrightResult.execution_id}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <Badge variant="outline" className="text-xs">
-                                                    {playwrightResult.browser_type}
-                                                </Badge>
-                                            </motion.div>
-
-                                            {/* Metrics */}
-                                            <motion.div
-                                                className="grid grid-cols-3 gap-3"
-                                                variants={itemVariants}
-                                            >
-                                                {[
-                                                    { value: `${(playwrightResult.duration_ms / 1000).toFixed(1)}s`, label: "Duration" },
-                                                    { value: playwrightResult.steps.length, label: "Steps" },
-                                                    { value: playwrightResult.network_logs_count, label: "Requests" }
-                                                ].map((metric, idx) => (
-                                                    <motion.div
-                                                        key={idx}
-                                                        className="p-4 rounded-xl bg-muted/30 border border-border/50 text-center"
-                                                        whileHover={{ scale: 1.05 }}
-                                                        transition={{ type: "spring", stiffness: 400 }}
-                                                    >
-                                                        <div className="text-xl font-bold text-foreground">{metric.value}</div>
-                                                        <div className="text-xs text-muted-foreground mt-1">{metric.label}</div>
-                                                    </motion.div>
-                                                ))}
-                                            </motion.div>
-
-                                            {/* Actions */}
-                                            <motion.div className="flex gap-2 flex-wrap" variants={itemVariants}>
-                                                {playwrightResult.trace_path && (
-                                                    <Button variant="outline" size="sm" onClick={downloadTrace} className="rounded-lg">
-                                                        <FileDown className="mr-2 h-4 w-4" />
-                                                        Download Trace
-                                                    </Button>
-                                                )}
-                                                {playwrightResult.screenshot_path && (
-                                                    <Button variant="outline" size="sm" onClick={downloadScreenshot} className="rounded-lg">
-                                                        <Camera className="mr-2 h-4 w-4" />
-                                                        View Screenshot
-                                                    </Button>
-                                                )}
-                                                <Button variant="outline" size="sm" onClick={fetchPlaywrightStatus} className="rounded-lg">
-                                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                                    Refresh
-                                                </Button>
-                                            </motion.div>
-
-                                            {/* Error */}
-                                            <AnimatePresence>
-                                                {playwrightResult.error_message && (
-                                                    <motion.div
-                                                        className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/20"
-                                                        initial={{ opacity: 0, height: 0 }}
-                                                        animate={{ opacity: 1, height: "auto" }}
-                                                        exit={{ opacity: 0, height: 0 }}
-                                                    >
-                                                        <div className="text-sm font-medium text-rose-600">Error</div>
-                                                        <div className="text-sm text-rose-500 mt-1 font-mono">
-                                                            {playwrightResult.error_message}
-                                                        </div>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-
-                                            {/* Defect */}
-                                            <AnimatePresence>
-                                                {playwrightResult.defect_id && (
-                                                    <motion.div
-                                                        className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20"
-                                                        initial={{ opacity: 0, y: 10 }}
-                                                        animate={{ opacity: 1, y: 0 }}
-                                                    >
-                                                        <div className="text-sm font-medium text-amber-600">
-                                                            Defect Created: DEF-{playwrightResult.defect_id}
-                                                        </div>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-
-                                            {/* Steps */}
-                                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                                                <Label className="text-sm font-medium">Execution Steps</Label>
-                                                {playwrightResult.steps.map((step, idx) => (
-                                                    <motion.div
-                                                        key={step.step_number}
-                                                        initial={{ opacity: 0, x: -20 }}
-                                                        animate={{ opacity: 1, x: 0 }}
-                                                        transition={{ delay: idx * 0.05 }}
-                                                    >
-                                                        <StepResult
-                                                            stepNumber={step.step_number}
-                                                            description={step.description}
-                                                            status={step.status}
-                                                            durationMs={step.duration_ms}
-                                                            actionType={step.action_type}
-                                                            selector={step.selector || undefined}
-                                                            error={step.error}
-                                                        />
-                                                    </motion.div>
-                                                ))}
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </ConfigCard>
-                        </motion.div>
-                    </div>
-                </motion.div>
+  return (
+    <DashboardLayout>
+      <div className="space-y-8 animate-fade-in">
+        {/* Page Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-2xl">🎭</span>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Autonomous Playwright Test Runner
+              </h1>
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 ml-2">
+                Playwright Engine v2
+              </Badge>
             </div>
-        </DashboardLayout>
-    );
+            <p className="text-sm text-muted-foreground">
+              Launch AI-driven browser test journeys with live DOM streaming, video recording, and auto-generated Playwright specs.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchRecentJobs}
+              disabled={refreshing}
+              className="gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh Runs
+            </Button>
+          </div>
+        </div>
+
+        {/* Preset Prompt Pills */}
+        <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <CardTitle className="text-sm font-semibold">Quick Verification Presets</CardTitle>
+            </div>
+            <CardDescription className="text-xs">
+              Select a pre-engineered test sequence or compose your custom natural language scenario below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
+                onClick={() =>
+                  handlePresetSelect(
+                    "https://demo.playwright.dev/todomvc",
+                    "Add 3 todos: 'Verify login flow', 'Test checkout process', and 'Check defect dashboard'. Mark the second todo as completed, filter by Active, and assert that only 2 items remain."
+                  )
+                }
+              >
+                📝 TodoMVC CRUD & Filter Flow
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
+                onClick={() =>
+                  handlePresetSelect(
+                    "https://demo.app-approval.com",
+                    "Sign in as employee 'john.doe@company.com'. Submit a leave request for 3 days. Sign out. Sign in as manager 'sarah.manager@company.com', navigate to approvals queue, approve the pending leave request, and assert 'Approved' badge appears."
+                  )
+                }
+              >
+                🔄 Multi-Role Approval Workflow
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
+                onClick={() =>
+                  handlePresetSelect(
+                    "https://demo.ecom-store.com",
+                    "Navigate to shop. Search for Wireless Headphones, click first product, click Add to Cart, proceed to Checkout, fill shipping address, place order, and assert Order Confirmed."
+                  )
+                }
+              >
+                🛒 E-Commerce Checkout E2E Journey
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
+                onClick={() =>
+                  handlePresetSelect(
+                    "https://example.com",
+                    "Verify that the home page loads successfully, displays the main heading, and check that the More Information link is clickable."
+                  )
+                }
+              >
+                🛡️ Header & Smoke Verification
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Main Launcher & Config Card */}
+        <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+              <Play className="w-4 h-4 text-primary" />
+              Configure & Launch Autonomous QA Run
+            </CardTitle>
+            <CardDescription className="text-xs">
+              The autonomous agent will inspect the DOM, perform multi-step user actions, execute assertions, and compile artifacts.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <form onSubmit={handleLaunch} className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Target URL */}
+                <div className="md:col-span-2 space-y-1.5">
+                  <Label htmlFor="target-url" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Target Web Application URL *
+                  </Label>
+                  <Input
+                    id="target-url"
+                    type="url"
+                    required
+                    placeholder="https://app.yourdomain.com"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    className="font-mono text-sm bg-background/80"
+                  />
+                </div>
+
+                {/* Project Selector */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="project" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Link Project (Optional)
+                  </Label>
+                  <select
+                    id="project"
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background/80 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">-- No Project Linked --</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Goal / Prompt */}
+              <div className="space-y-1.5">
+                <Label htmlFor="goal-prompt" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Natural Language Verification Goal / Step Instructions *
+                </Label>
+                <Textarea
+                  id="goal-prompt"
+                  required
+                  rows={4}
+                  placeholder="Describe your testing sequence, assertions, form inputs, and expected outcomes..."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  className="text-sm bg-background/80"
+                />
+              </div>
+
+              {/* Execution Options Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Execution Mode
+                  </Label>
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background/80 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="interactive">Interactive (Real-Time Container)</option>
+                    <option value="scheduled">Batch (Background Execution)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Browser Engine
+                  </Label>
+                  <select
+                    value={browserType}
+                    onChange={(e) => setBrowserType(e.target.value)}
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background/80 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="chromium">Chromium (Google Chrome)</option>
+                    <option value="firefox">Firefox</option>
+                    <option value="webkit">WebKit (Safari)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Display Mode
+                  </Label>
+                  <select
+                    value={headless ? "headless" : "headed"}
+                    onChange={(e) => setHeadless(e.target.value === "headless")}
+                    className="w-full h-9 px-3 rounded-md border border-input bg-background/80 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="headless">Headless (Fastest in Container)</option>
+                    <option value="headed">Headed (Visual Display)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Error Alert */}
+              {error && (
+                <div className="p-3.5 rounded-lg bg-destructive/15 border border-destructive/30 text-destructive text-sm flex items-center gap-3">
+                  <ShieldCheck className="w-5 h-5 flex-shrink-0" />
+                  <div>
+                    <span className="font-bold">Ingress Protection Notice:</span> {error}
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <div className="pt-2 flex justify-end">
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold gap-2 shadow-lg shadow-primary/20"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Initializing Agent Container...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Launch Autonomous QA Run
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Live Execution Inspector (Visible when activeJobId is set) */}
+        {activeJobId && (
+          <div className="space-y-6">
+            {/* Run Status Header Banner */}
+            <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                        {activeJob?.id || activeJobId}
+                      </span>
+                      <Badge
+                        variant={
+                          activeJob?.status === "completed" || activeRun?.status === "passed"
+                            ? "default"
+                            : activeJob?.status === "failed" || activeRun?.status === "failed"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                        className="capitalize text-xs"
+                      >
+                        {activeJob?.status === "running" ? "⚡ Running in Playwright Engine" : activeJob?.status || "Processing"}
+                      </Badge>
+                      {activeRun?.taxonomy && (
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {activeRun.taxonomy}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-foreground truncate max-w-xl">
+                      {activeJob?.url || url}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-primary" />
+                      <span>
+                        Duration:{" "}
+                        <strong className="text-foreground font-mono">
+                          {activeRun?.duration_ms ? `${(activeRun.duration_ms / 1000).toFixed(1)}s` : "In Progress..."}
+                        </strong>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-primary" />
+                      <span>
+                        Steps: <strong className="text-foreground font-mono">{steps.length}</strong>
+                      </span>
+                    </div>
+
+                    {activeRun?.fitness_score != null && (
+                      <div className="flex items-center gap-1.5 bg-primary/10 px-3 py-1 rounded-md border border-primary/20">
+                        <span className="font-bold text-primary font-mono text-sm">
+                          {activeRun.fitness_score}% Fitness Score
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Split Screen Inspector: Left = Steps Timeline, Right = Artifact Tabs */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Live Steps Stream */}
+              <div className="lg:col-span-5 space-y-4">
+                <Card className="border-border/60 bg-card/60 backdrop-blur-md h-[560px] flex flex-col shadow-sm">
+                  <CardHeader className="py-3.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-primary" />
+                      <CardTitle className="text-sm font-bold">Execution Timeline</CardTitle>
+                    </div>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {steps.length} actions logged
+                    </span>
+                  </CardHeader>
+
+                  <CardContent className="p-3 flex-1 overflow-y-auto space-y-2.5 font-mono text-xs">
+                    {steps.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-6 text-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                        <p className="text-xs">Connecting to headless Playwright worker...</p>
+                      </div>
+                    ) : (
+                      steps.map((s, idx) => (
+                        <div
+                          key={s.id || idx}
+                          className="p-3 rounded-lg border border-border/50 bg-background/60 hover:bg-background/90 transition-all space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
+                                {s.step_number}
+                              </span>
+                              <span className="font-semibold text-foreground text-xs">
+                                {s.tool_call_name || "action"}
+                              </span>
+                            </div>
+                            <Badge variant="outline" className="text-[10px] font-normal py-0">
+                              {s.duration_ms ? `${s.duration_ms}ms` : "ok"}
+                            </Badge>
+                          </div>
+
+                          <p className="text-muted-foreground text-[11px] font-sans leading-relaxed">
+                            {s.action_taken}
+                          </p>
+
+                          {s.tool_args && Object.keys(s.tool_args).length > 0 && (
+                            <div className="bg-secondary/40 p-1.5 rounded text-[10px] text-muted-foreground overflow-x-auto">
+                              {JSON.stringify(s.tool_args)}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Right Column: Artifacts & Inspectors (Video, Screenshot, Spec Code, Memory) */}
+              <div className="lg:col-span-7">
+                <Card className="border-border/60 bg-card/60 backdrop-blur-md h-[560px] flex flex-col shadow-sm overflow-hidden">
+                  <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+                    <div className="px-4 pt-3 border-b border-border/40 flex items-center justify-between">
+                      <TabsList className="bg-secondary/50">
+                        <TabsTrigger value="video" className="text-xs gap-1.5">
+                          <Film className="w-3.5 h-3.5" />
+                          Session Video
+                        </TabsTrigger>
+                        <TabsTrigger value="code" className="text-xs gap-1.5">
+                          <Code className="w-3.5 h-3.5" />
+                          Playwright Spec
+                        </TabsTrigger>
+                        <TabsTrigger value="memory" className="text-xs gap-1.5">
+                          <Brain className="w-3.5 h-3.5" />
+                          Agent Memory
+                        </TabsTrigger>
+                      </TabsList>
+
+                      {activeTab === "code" && specCode && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={copySpecToClipboard}
+                          className="h-7 text-xs gap-1"
+                        >
+                          {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                          {copied ? "Copied" : "Copy Code"}
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Tab 1: Video Player */}
+                    <TabsContent value="video" className="flex-1 p-4 m-0 flex flex-col justify-center items-center">
+                      {activeRun?.video_url ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center space-y-2">
+                          <div className="w-full flex-1 max-h-[420px] rounded-lg overflow-hidden border border-border/60 bg-black/90 flex items-center justify-center">
+                            <video
+                              src={activeRun.video_url}
+                              controls
+                              autoPlay
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between w-full text-xs text-muted-foreground font-mono pt-1">
+                            <span>Format: WebM Video Session</span>
+                            <a
+                              href={activeRun.video_url}
+                              download
+                              className="text-primary hover:underline flex items-center gap-1"
+                            >
+                              <FileDown className="w-3 h-3" />
+                              Download Recording
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-center p-8 space-y-3 text-muted-foreground">
+                          <Film className="w-12 h-12 stroke-[1.2] animate-pulse text-primary" />
+                          <div className="space-y-1">
+                            <p className="font-semibold text-foreground text-sm">Session Recording in Progress</p>
+                            <p className="text-xs max-w-sm">
+                              The browser session is being captured frame-by-frame. The WebM recording compiles automatically upon run completion.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    {/* Tab 2: Generated Playwright Spec Code */}
+                    <TabsContent value="code" className="flex-1 p-4 m-0 flex flex-col overflow-hidden">
+                      {specCode ? (
+                        <div className="w-full h-full flex flex-col space-y-2">
+                          <pre className="flex-1 p-4 rounded-lg bg-zinc-950 border border-border/60 text-zinc-100 font-mono text-xs overflow-auto leading-relaxed">
+                            {specCode}
+                          </pre>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+                            <span>Ready for CI/CD & Local Execution</span>
+                            {activeRun?.spec_url && (
+                              <a
+                                href={activeRun.spec_url}
+                                download="test.spec.ts"
+                                className="text-primary hover:underline flex items-center gap-1"
+                              >
+                                <FileDown className="w-3 h-3" />
+                                Download .spec.ts
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 text-muted-foreground">
+                          <Code className="w-12 h-12 stroke-[1.2] text-muted-foreground" />
+                          <div className="space-y-1">
+                            <p className="font-semibold text-foreground text-sm">Synthesizing Playwright Spec Script</p>
+                            <p className="text-xs max-w-sm">
+                              The AI engine translates executed action steps into resilient, reproducible Playwright code.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    {/* Tab 3: Agent Memory & Assertions */}
+                    <TabsContent value="memory" className="flex-1 p-4 m-0 overflow-y-auto space-y-4">
+                      <div className="p-3.5 rounded-lg border border-border/60 bg-background/60 space-y-1.5">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Structured Execution Summary
+                        </span>
+                        <p className="text-sm text-foreground leading-relaxed">
+                          {memoryData?.structured_summary || "Evaluating agent memory upon step completion..."}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Passed Assertions */}
+                        <div className="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 space-y-2">
+                          <div className="flex items-center gap-1.5 text-emerald-500 text-xs font-bold">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>PASSED ASSERTIONS ({memoryData?.passed_assertions?.length || 0})</span>
+                          </div>
+                          {memoryData?.passed_assertions?.length > 0 ? (
+                            <ul className="space-y-1 text-xs text-foreground font-sans">
+                              {memoryData.passed_assertions.map((a: string, i: number) => (
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <span className="text-emerald-500">•</span>
+                                  <span>{a}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">No passed assertions recorded yet</p>
+                          )}
+                        </div>
+
+                        {/* Failed Assertions */}
+                        <div className="p-3.5 rounded-lg border border-destructive/30 bg-destructive/5 space-y-2">
+                          <div className="flex items-center gap-1.5 text-destructive text-xs font-bold">
+                            <XCircle className="w-4 h-4" />
+                            <span>FAILED ASSERTIONS ({memoryData?.failed_assertions?.length || 0})</span>
+                          </div>
+                          {memoryData?.failed_assertions?.length > 0 ? (
+                            <ul className="space-y-1 text-xs text-destructive font-sans">
+                              {memoryData.failed_assertions.map((a: string, i: number) => (
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <span>•</span>
+                                  <span>{a}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">Zero assertion failures recorded</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* DOM Selector Cache */}
+                      <div className="p-3.5 rounded-lg border border-border/60 bg-zinc-950 text-zinc-300 space-y-1.5 font-mono text-xs">
+                        <span className="text-xs font-bold text-primary">DOM SELECTOR CACHE & HEURISTICS</span>
+                        <pre className="overflow-x-auto text-[11px] text-muted-foreground">
+                          {JSON.stringify(memoryData?.selector_cache || {}, null, 2)}
+                        </pre>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Live Run Execution History Table */}
+        <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-bold">Run Execution History</CardTitle>
+            <CardDescription className="text-xs">
+              Recent autonomous test runs executed through the Playwright BullMQ worker pool.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {recentJobs.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                No past executions found. Launch your first run above to start monitoring.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/60 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/30">
+                      <th className="py-3 px-4 font-semibold">Job ID</th>
+                      <th className="py-3 px-4 font-semibold">Target URL</th>
+                      <th className="py-3 px-4 font-semibold">Status</th>
+                      <th className="py-3 px-4 font-semibold">Taxonomy</th>
+                      <th className="py-3 px-4 font-semibold">Fitness</th>
+                      <th className="py-3 px-4 font-semibold">Date</th>
+                      <th className="py-3 px-4 font-semibold text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {recentJobs.map((job) => (
+                      <tr key={job.id} className="hover:bg-muted/40 transition-colors">
+                        <td className="py-3.5 px-4 font-mono text-xs text-primary font-semibold">
+                          {job.id.slice(0, 14)}...
+                        </td>
+                        <td className="py-3.5 px-4 font-medium max-w-[240px] truncate text-foreground">
+                          {job.url}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Badge
+                            variant={
+                              job.status === "completed" || job.status === "passed"
+                                ? "default"
+                                : job.status === "failed"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className="capitalize text-[11px]"
+                          >
+                            {job.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-xs">
+                          {job.taxonomy ? (
+                            <span className="text-muted-foreground">{job.taxonomy}</span>
+                          ) : (
+                            <span className="text-muted-foreground/60">—</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-xs font-bold text-primary">
+                          {job.fitness_score != null ? `${job.fitness_score}%` : "—"}
+                        </td>
+                        <td className="py-3.5 px-4 text-xs text-muted-foreground">
+                          {new Date(job.created_at).toLocaleString()}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setActiveJobId(job.id);
+                              window.scrollTo({ top: 400, behavior: "smooth" });
+                            }}
+                            className="h-7 text-xs gap-1"
+                          >
+                            Inspect Run
+                            <ArrowUpRight className="w-3 h-3" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
+  );
 }
