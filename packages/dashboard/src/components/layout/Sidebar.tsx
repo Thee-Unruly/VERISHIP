@@ -244,8 +244,8 @@ export function AppSidebar({ collapsed, setCollapsed }: AppSidebarProps) {
                       <Bot className="h-5 w-5 text-sidebar-muted" />
                       <span className="text-sidebar-muted">Agent Copilot</span>
                     </div>
-                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground border border-border">
-                      Pending n8n
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 tracking-wide">
+                      Soon
                     </span>
                   </div>
                   <Link
