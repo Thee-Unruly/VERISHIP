@@ -680,8 +680,8 @@ export default function PlaywrightPage() {
                           </p>
 
                           {s.tool_args && Object.keys(s.tool_args).length > 0 && (
-                            <div className="bg-secondary/40 p-1.5 rounded text-[10px] text-muted-foreground overflow-x-auto">
-                              {JSON.stringify(s.tool_args)}
+                            <div className="bg-muted/80 p-2 rounded border border-border/50 text-[11px] font-mono text-foreground overflow-x-auto">
+                              {JSON.stringify(s.tool_args, null, 2)}
                             </div>
                           )}
 
@@ -878,10 +878,20 @@ export default function PlaywrightPage() {
                       </div>
 
                       {/* DOM Selector Cache */}
-                      <div className="p-3.5 rounded-lg border border-border/60 bg-zinc-950 text-zinc-300 space-y-1.5 font-mono text-xs shadow-inner flex-1 min-h-[160px] flex flex-col">
-                        <span className="text-xs font-bold text-primary flex-shrink-0">DOM SELECTOR CACHE & HEURISTICS</span>
-                        <pre className="overflow-auto text-[11px] text-muted-foreground flex-1">
-                          {JSON.stringify(memoryData?.selector_cache || {}, null, 2)}
+                      <div className="p-4 rounded-lg border border-border/80 bg-zinc-950 text-zinc-100 space-y-2 font-mono text-xs shadow-inner flex-1 min-h-[180px] flex flex-col">
+                        <div className="flex items-center justify-between pb-2 border-b border-zinc-800 flex-shrink-0">
+                          <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5 uppercase tracking-wider">
+                            <Brain className="w-3.5 h-3.5 text-sky-400" />
+                            DOM Selector Cache & Heuristics
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            JSON Inspector
+                          </span>
+                        </div>
+                        <pre className="overflow-auto text-xs text-emerald-400 font-mono flex-1 p-3 rounded bg-black/80 border border-zinc-850 selection:bg-primary selection:text-white leading-relaxed">
+                          {memoryData?.selector_cache && Object.keys(memoryData.selector_cache).length > 0
+                            ? JSON.stringify(memoryData.selector_cache, null, 2)
+                            : "// No selectors cached yet. Elements are cached dynamically as agent executes DOM actions."}
                         </pre>
                       </div>
                     </TabsContent>
