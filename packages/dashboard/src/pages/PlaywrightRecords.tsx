@@ -333,15 +333,34 @@ export default function PlaywrightRecords() {
         {/* Filter Toolbar & Search Bar */}
         <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
           <CardContent className="p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-            {/* Search Input */}
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search URL, prompt, or Job ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-background/80 h-9 text-xs"
-              />
+            {/* Search and Project Selector Bar */}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Project Dropdown Selector */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedProjectId || "all"}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="h-9 px-3 rounded-md border border-input bg-background/90 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
+                >
+                  <option value="all">📁 All Projects ({projects.length})</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      📁 {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search Input */}
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search URL, prompt, or Job ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 bg-background/80 h-9 text-xs"
+                />
+              </div>
             </div>
 
             {/* Status Pills */}
