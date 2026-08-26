@@ -1,0 +1,6 @@
+Requirement Title,Description,Acceptance Criteria,Priority
+User Authentication & Login,Allow users to authenticate using work email and password. Handle rate limiting and session refresh.,"Given valid credentials; When user submits login form; Then user receives JWT auth token | Given invalid password; When submitted; Then system returns 401 Unauthorized",1
+Order Checkout Flow,Users can review items in cart and complete checkout with credit card or mobile money.,"Given non-empty cart; When user enters valid card; Then order is placed with confirmation ID | Given expired card; When submitted; Then user sees friendly card decline error",2
+Real-time Delivery Tracking,Enable customers to view live geolocation coordinates of their dispatch rider on a map.,"Given active shipment; When customer opens tracking link; Then map updates rider location every 5 seconds",3
+Automated PDF Invoice Generation,System automatically compiles tax compliant invoice and attaches to confirmation email.,"Given completed payment; When order state transitions to paid; Then PDF invoice is generated and emailed within 30s",2
+Role-based Team Permissions,Admins can assign QA Lead or Viewer roles to members to restrict defect deletion.,"Given user with Viewer role; When viewing defects; Then delete and edit buttons are disabled",3

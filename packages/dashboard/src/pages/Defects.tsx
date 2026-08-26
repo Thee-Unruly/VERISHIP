@@ -243,6 +243,15 @@ export default function Defects() {
               className="hidden"
               onChange={handleImportDefects}
             />
+            <a
+              href="/templates/defects_template.csv"
+              download="defects_template.csv"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
+              title="Download Excel/CSV Import Template"
+            >
+              <Upload className="h-4 w-4 mr-2 rotate-180" />
+              Template
+            </a>
             <Button onClick={() => importInputRef.current?.click()} variant="outline">
               <Upload className="h-4 w-4 mr-2" />
               Import File
@@ -252,7 +261,7 @@ export default function Defects() {
               Refresh
             </Button>
             <Button onClick={() => setIsCreateModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               New Defect
             </Button>
           </div>

@@ -317,6 +317,15 @@ export default function TestCases() {
               className="hidden"
               onChange={handleImportTestCases}
             />
+            <a
+              href="/templates/test_cases_template.csv"
+              download="test_cases_template.csv"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
+              title="Download Excel/CSV Import Template"
+            >
+              <Upload className="h-4 w-4 mr-2 rotate-180" />
+              Template
+            </a>
             <Button onClick={() => importInputRef.current?.click()} variant="outline">
               <Upload className="h-4 w-4 mr-2" />
               Import File

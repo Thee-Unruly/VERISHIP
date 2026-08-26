@@ -1,0 +1,7 @@
+Test Case Title,Requirement Title,Test Type,Priority,Status,Description
+Verify Successful User Login with Valid Email,User Authentication & Login,automated-agent,1,pass,"Navigate to /login, input registered test account credentials, submit form, verify 200 OK and dashboard redirection."
+Verify Account Lockout on 5 Consecutive Failed Logins,User Authentication & Login,automated-agent,2,ongoing,"Submit 5 invalid password attempts, verify account lockout banner and rate limit 429 response."
+Verify End-to-End Checkout with Valid Payment,Order Checkout Flow,automated-agent,1,pass,"Add 2 products to cart, proceed to checkout, enter sandbox card credentials, assert order success page."
+Verify Checkout Fails on Expired Credit Card,Order Checkout Flow,manual,2,pass,"Enter card with past expiration date, assert clear card expiration validation warning."
+Verify Real-time Location Pin Updates on Rider Movement,Real-time Delivery Tracking,manual,3,ongoing,"Simulate rider WebSocket location broadcast, verify leaflet map pin moves without full page reload."
+Verify Invoice PDF Download Contains Correct VAT,Automated PDF Invoice Generation,automated-agent,2,retest,"Trigger order completion webhook, download generated PDF, parse and assert 16% VAT line item."
