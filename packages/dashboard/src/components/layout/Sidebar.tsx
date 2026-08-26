@@ -23,6 +23,7 @@ import {
   User,
   Check,
   PlusCircle,
+  Film,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjects } from "@/context/ProjectsContext";
@@ -45,6 +46,7 @@ const qaManagementNav = [
 
 const automatedTestingNav = [
   { name: "Playwright", href: "/playwright", icon: Play },
+  { name: "Test Records", href: "/playwright-records", icon: Film },
   { name: "Load Testing", href: "/load-testing", icon: Zap },
 ];
 

@@ -12,6 +12,7 @@ import TestCases from "./pages/TestCases";
 import Defects from "./pages/Defects";
 import Releases from "./pages/Releases";
 import Playwright from "./pages/Playwright";
+import PlaywrightRecords from "./pages/PlaywrightRecords";
 import LoadTesting from "./pages/LoadTesting";
 import Settings from "./pages/Settings";
 import Copilot from "./pages/Copilot";
@@ -79,6 +80,8 @@ const App = () => {
               <Route path="/test-cases" element={<ProtectedRoute element={<TestCases />} />} />
               <Route path="/test-runner" element={<Navigate to="/playwright" replace />} />
               <Route path="/playwright" element={<ProtectedRoute element={<Playwright />} />} />
+              <Route path="/playwright-records" element={<ProtectedRoute element={<PlaywrightRecords />} />} />
+              <Route path="/playwright/records" element={<ProtectedRoute element={<PlaywrightRecords />} />} />
               <Route path="/load-testing" element={<ProtectedRoute element={<LoadTesting />} />} />
               <Route path="/defects" element={<ProtectedRoute element={<Defects />} />} />
               <Route path="/releases" element={<ProtectedRoute element={<Releases />} />} />

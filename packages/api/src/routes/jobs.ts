@@ -125,6 +125,7 @@ export async function jobRoutes(fastify: FastifyInstance) {
     const { projectId } = req.query || {};
     let query = `
       SELECT j.*, r.id as run_id, r.status as run_status, r.taxonomy, r.fitness_score, r.total_steps,
+             r.duration_ms, r.trace_url, r.video_url, r.spec_url, r.completed_at,
              p.name as project_name, tc.title as test_case_title
       FROM jobs j
       LEFT JOIN runs r ON j.id = r.job_id
@@ -136,7 +137,7 @@ export async function jobRoutes(fastify: FastifyInstance) {
       query += ` WHERE j.project_id = $1`;
       params.push(projectId);
     }
-    query += ` ORDER BY j.created_at DESC LIMIT 50`;
+    query += ` ORDER BY j.created_at DESC LIMIT 100`;
 
     const { rows } = await pool.query(query, params);
     return reply.send(rows);
