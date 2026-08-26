@@ -1,5 +1,5 @@
 {
-  "name": "Veriship Autonomous QA Agent",
+  "name": "Veriship Autonomous QA Agent (Married V2)",
   "nodes": [
     {
       "parameters": {
@@ -9,31 +9,167 @@
         "options": {
           "responseHeaders": {
             "entries": [
-              { "name": "Access-Control-Allow-Origin", "value": "*" },
-              { "name": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization, ngrok-skip-browser-warning"
+              }
             ]
           }
         }
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [-750, -280],
-      "name": "Webhook"
+      "position": [
+        -752,
+        -288
+      ],
+      "id": "9b2b72c8-68d9-490b-8bc5-fb600cd93120",
+      "name": "Webhook",
+      "webhookId": "2d6ee7af-985e-4980-ae12-5b84e4acb01c"
     },
     {
       "parameters": {
         "promptType": "define",
         "text": "={{ $json.body.message }}",
         "options": {
-          "systemMessage": "You are VeriShip Autonomous AI Quality Agent.\n\nYou interact with the VeriShip Quality Governance & Autonomous QA Platform via MCP tools.\n\nKey Capabilities:\n- Inspect and analyze requirements clarity\n- Auto-generate test cases & acceptance criteria\n- Trigger autonomous Playwright web agent test runs\n- Monitor test execution status, live video, and trace artifacts\n- Log and categorize defects with AI root-cause analysis\n- Calculate Release Gate readiness and GO/NO-GO release decisions."
+          "systemMessage": "You are Amira, the autonomous AI Quality & Governance Assistant for VeriShip.\n\nAUTHENTICATION (DO THIS FIRST — before any other tool, on every single request if token is provided):\n- If a user token is provided in {{ $json.body.token }}, call set_token with that value.\n- NEVER ask the user for credentials or passwords.\n\nAUTONOMY RULES (CRITICAL):\n- ALWAYS call a tool to answer questions. Never guess from training data.\n- NEVER ask \"Would you like me to do that?\" — execute immediately and report results.\n- NEVER say \"I can't provide X directly\" if a tool exists — search and find the required entity.\n- When a project, requirement, or test case ID is needed, call list_projects or the relevant list tool first to locate it.\n- You can chain multiple tools together to complete full end-to-end quality journeys.\n\nMARRIED CORE TOOLS (Use ONLY these exact MCP tool names):\n1. Projects & Governance:\n   - list_projects: List projects with quality health scores.\n   - create_project, get_project_metrics: Manage quality governance projects.\n2. Requirements QA & Copilot:\n   - list_requirements: List requirements for a project.\n   - create_requirement: Add requirement with automated AI clarity & testability scoring.\n   - analyze_requirement_clarity: Analyze clarity (0-100), detect ambiguities, suggest acceptance criteria.\n   - generate_tests_from_requirement: Auto-generate positive, negative, and edge test cases from a requirement.\n3. Autonomous Test Execution (Playwright V2 Engine):\n   - create_test_case: Register automated web test cases.\n   - list_test_cases: View test cases.\n   - execute_qa_job: Submit autonomous Playwright test jobs to the BullMQ worker pool.\n   - get_job_status: Poll live test execution status, steps, video playback URL, trace artifacts, and Playwright spec.\n4. Defect Intelligence:\n   - list_defects: View defects with AI root-cause analysis.\n   - create_defect: Log bugs and trigger AI severity & root-cause categorization.\n5. Release Readiness Gate:\n   - list_releases: View releases.\n   - evaluate_release_readiness: Run the deterministic 0-100 Quality Gate and generate automated GO/NO-GO release decisions.\n6. Health & Service Accounts:\n   - health_check: Verify API and database health.\n   - create_service_account: Provision persistent agent bearer tokens.\n\nOUTPUT FORMAT:\n- Respond in clean, professional Markdown in plain English.\n- Confirm exact project, requirement, job, or defect IDs after performing actions.\n- When reporting test execution or release gate evaluations, format scores and recommendations clearly with emojis (e.g. 🟢 GO / 🔴 NO-GO).",
+          "maxIterations": 50
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
-      "position": [-420, -350],
+      "position": [
+        -416,
+        -352
+      ],
+      "id": "c182fa2e-0014-40f0-8beb-6d18aac5005c",
       "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $node[\"AI Agent\"].json[\"output\"] }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -48,
+        -176
+      ],
+      "id": "fe81ad6c-42e6-4b52-aefe-bfb3d535afe2",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "sseEndpoint": "http://host.docker.internal:8001/sse",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        -112
+      ],
+      "id": "b53390fd-5a1e-41c1-8be8-b1acfcf5f2d2",
+      "name": "MCP Client"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -144
+      ],
+      "id": "50090651-e8dc-499f-88f4-c1a0f65d7482",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "YD6eEVS31gS1q5Xx",
+          "name": "Veriship Agentic"
+        }
+      }
     }
   ],
-  "connections": {}
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "46ed0954-8302-44e6-b48f-ad4a466deb40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "317860ffddf6a439e942df3cbd50c296892f9e564126d3ec98f575f43ee8e726"
+  },
+  "id": "txxe7HFtsGkRNA2i",
+  "tags": []
 }

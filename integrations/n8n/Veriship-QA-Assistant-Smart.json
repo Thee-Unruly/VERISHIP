@@ -1,0 +1,339 @@
+{
+  "name": "Veriship QA Assistant (Smart)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "veriship-qa",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1264,
+        160
+      ],
+      "id": "68ebcc7c-658f-45fe-a063-46568af23db9",
+      "name": "Webhook",
+      "webhookId": "3fa4235e-7ece-4ab9-b349-9d2b144889e7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get user data from Webhook\nconst body = $('Webhook').first().json.body;\nconst uid = parseInt(body.user_id || 0, 10);\nconst uname = body.user_name || '';\nconst original = body.message;\n\n// Parse LLM classification\nlet classification = { isComplex: true };\ntry {\n  const raw = $input.first().json.text || '';\n  const start = raw.indexOf('{');\n  const end = raw.lastIndexOf('}');\n  if (start >= 0 && end > start) {\n    classification = JSON.parse(raw.slice(start, end + 1));\n  }\n} catch(e) {}\n\nconst isComplex = !!classification.isComplex;\nconst table = classification.table || '';\nconst filters = classification.filters || {};\nlet query = null;\n\nif (!isComplex && table) {\n  if (filters.count) {\n    if (table === 'test_cases') { query = `SELECT COUNT(*) as total FROM test_cases tc JOIN user_project_assignment upa ON tc.project_id = upa.project_id WHERE upa.user_id = ${uid};`; }\n    else if (table === 'defects') { query = `SELECT COUNT(*) as total FROM defects d JOIN user_project_assignment upa ON d.project_id = upa.project_id WHERE upa.user_id = ${uid};`; }\n    else if (table === 'projects') { query = `SELECT COUNT(*) as total FROM projects p JOIN user_project_assignment upa ON p.id = upa.project_id WHERE upa.user_id = ${uid};`; }\n    else if (table === 'requirements') { query = `SELECT COUNT(*) as total FROM requirements r JOIN user_project_assignment upa ON r.project_id = upa.project_id WHERE upa.user_id = ${uid};`; }\n  } else if (table === 'test_cases') {\n    const sf = filters.status ? ` AND tc.status = '${filters.status}'` : '';\n    query = `SELECT tc.id, tc.title, tc.status, tc.test_type, p.name as project FROM test_cases tc JOIN projects p ON tc.project_id = p.id JOIN user_project_assignment upa ON p.id = upa.project_id WHERE upa.user_id = ${uid}${sf} ORDER BY tc.id DESC LIMIT 100;`;\n  } else if (table === 'defects') {\n    const sf = filters.status ? ` AND d.status = '${filters.status}'` : '';\n    const sevf = filters.severity ? ` AND d.severity = '${filters.severity}'` : '';\n    query = `SELECT d.id, d.title, d.severity, d.status, p.name as project FROM defects d JOIN projects p ON d.project_id = p.id JOIN user_project_assignment upa ON p.id = upa.project_id WHERE upa.user_id = ${uid}${sf}${sevf} ORDER BY d.id DESC LIMIT 100;`;\n  } else if (table === 'projects') {\n    const sf = filters.status ? ` AND p.status = '${filters.status}'` : '';\n    query = `SELECT DISTINCT p.id, p.name, p.description, p.status FROM projects p JOIN user_project_assignment upa ON p.id = upa.project_id WHERE upa.user_id = ${uid}${sf} LIMIT 100;`;\n  } else if (table === 'requirements') {\n    query = `SELECT r.id, r.title, r.description, p.name as project FROM requirements r JOIN projects p ON r.project_id = p.id JOIN user_project_assignment upa ON p.id = upa.project_id WHERE upa.user_id = ${uid} LIMIT 100;`;\n  } else if (table === 'releases') {\n    query = `SELECT r.id, r.version, r.description, p.name as project FROM releases r JOIN projects p ON r.project_id = p.id JOIN user_project_assignment upa ON p.id = upa.project_id WHERE upa.user_id = ${uid} LIMIT 100;`;\n  }\n}\n\nreturn [{ json: { query, uid, uname, original_message: original, isComplex: !!(isComplex || !query) } }];"
+      },
+      "id": "f9af388b-76df-4a04-aa4e-ab081c7cf74a",
+      "name": "Generate SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "simple-check",
+              "leftValue": "={{ $('Generate SQL').first().json.isComplex }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9020d2d9-7a5c-485f-a80c-22b7830eda87",
+      "name": "Simple or Complex?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1712,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $('Generate SQL').first().json.query }}",
+        "options": {}
+      },
+      "id": "321ac0c7-d05e-4214-a698-4dbd9f033908",
+      "name": "Execute SQL (Fast)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1920,
+        48
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "tXLuwmMKYkphqY3a",
+          "name": "Veriship"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(r => r.json);\nconst msg = $('Generate SQL').first().json.original_message;\n\nif (rows.length === 0) {\n  return [{ json: { response: `No results found for: \"${msg}\"` } }];\n}\n\nif (rows[0].total !== undefined) {\n  return [{ json: { response: `**Total: ${rows[0].total}**` } }];\n}\n\nconst formatted = rows.map((r, i) => {\n  const lines = Object.entries(r)\n    .map(([k, v]) => `  - **${k}**: ${v}`)\n    .join('\\n');\n  return `**${i + 1}.** ${r.title || r.name || r.version || ''}\\n${lines}`;\n}).join('\\n\\n');\n\nreturn [{ json: { response: `Found **${rows.length}** result(s):\\n\\n${formatted}` } }];"
+      },
+      "id": "6fa78efc-47ee-49da-8bbd-a9266bc704d7",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Generate SQL').first().json.original_message }}",
+        "options": {
+          "systemMessage": "=You are a SQL expert for a QA platform database.\n\nSCHEMA:\nTABLE: users — id, username, email, name, role, is_active\nTABLE: projects — id, name, description, status, created_at\nTABLE: user_project_assignment — user_id (FK users.id), project_id (FK projects.id)\nTABLE: test_cases — id, project_id, title, status, test_type\nTABLE: defects — id, project_id, title, severity, status\nTABLE: releases — id, project_id, version, description\nTABLE: requirements — id, project_id, title, description\n\nCURRENT USER:\n- user_id: {{ $('Generate SQL').first().json.uid }}\n- username: {{ $('Generate SQL').first().json.uname }}\n\nRULES:\n1. Always use literal user_id value {{ $('Generate SQL').first().json.uid }} in WHERE clauses, never use placeholders\n2. Always JOIN user_project_assignment to filter user's data\n3. Only SELECT, never INSERT/UPDATE/DELETE/DROP\n4. Always LIMIT 100\n5. Use explicit JOINs only\n\nGenerate a valid SQL SELECT query, then execute it using the SQL tool."
+        }
+      },
+      "id": "60248cb4-2153-48e5-9474-beb6f9bba246",
+      "name": "AI Agent (Complex)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1920,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2368,
+        160
+      ],
+      "id": "51971821-31c8-4c74-ad1c-0f2c89fa0d00",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        496
+      ],
+      "id": "0731b600-5776-45cd-99f2-f1f3f7b07c67",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "qvYjJUk1dQNZnipe",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Execute a SQL query in Postgres",
+        "operation": "executeQuery",
+        "query": "={{ $fromAI('query', 'A valid SQL SELECT query') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        2080,
+        512
+      ],
+      "id": "b477e355-0c13-4602-901a-c323e46f6e98",
+      "name": "Execute a SQL query in Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "tXLuwmMKYkphqY3a",
+          "name": "Veriship"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a query classifier for a QA platform database.\n\nSCHEMA:\n- test_cases: id, project_id, title, status (pass/fail/ongoing/blocked/retest), test_type\n- defects: id, project_id, title, severity (low/medium/high/critical), status (open/in_progress/resolved/closed)\n- projects: id, name, description, status (on-track/at-risk/delayed/completed)\n- requirements: id, project_id, title, description\n- releases: id, project_id, version, description\n\nClassify the user's question and respond ONLY with valid JSON — no markdown, no extra text.\n\nSimple (single table + optional filter): {\"isComplex\": false, \"table\": \"TABLE_NAME\", \"filters\": {}}\nComplex (multi-table, aggregation, negation): {\"isComplex\": true}\n\nExamples:\n\"which test cases failed?\" -> {\"isComplex\": false, \"table\": \"test_cases\", \"filters\": {\"status\": \"fail\"}}\n\"list all defects\" -> {\"isComplex\": false, \"table\": \"defects\", \"filters\": {}}\n\"how many test cases do I have?\" -> {\"isComplex\": false, \"table\": \"test_cases\", \"filters\": {\"count\": true}}\n\"which requirements have no test cases?\" -> {\"isComplex\": true}\n\"show high severity defects\" -> {\"isComplex\": false, \"table\": \"defects\", \"filters\": {\"severity\": \"high\"}}\n\"list delayed projects\" -> {\"isComplex\": false, \"table\": \"projects\", \"filters\": {\"status\": \"delayed\"}}\n\nUser question: {{ $('Webhook').first().json.body.message }}"
+      },
+      "id": "classify-intent-1",
+      "name": "Classify Intent",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1376,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "gemini-classifier-1",
+      "name": "Google Gemini Classifier",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        340
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "qvYjJUk1dQNZnipe",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Classify Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Intent": {
+      "main": [
+        [
+          {
+            "node": "Generate SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SQL": {
+      "main": [
+        [
+          {
+            "node": "Simple or Complex?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple or Complex?": {
+      "main": [
+        [
+          {
+            "node": "Execute SQL (Fast)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent (Complex)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute SQL (Fast)": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Complex)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent (Complex)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query in Postgres": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent (Complex)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Classifier": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Classify Intent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "0c6b4749-085d-463c-aa1f-8fd99c4879ee",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "317860ffddf6a439e942df3cbd50c296892f9e564126d3ec98f575f43ee8e726"
+  },
+  "id": "XT4X8uJZxwBLhGQn",
+  "tags": []
+}
