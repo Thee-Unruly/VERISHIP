@@ -33,7 +33,6 @@ const qaManagementNav = [
 
 const automatedTestingNav = [
   { name: "Playwright", href: "/playwright", icon: Play },
-  { name: "Trial Runner", href: "/test-runner", icon: Globe },
   { name: "Load Testing", href: "/load-testing", icon: Zap },
 ];
 

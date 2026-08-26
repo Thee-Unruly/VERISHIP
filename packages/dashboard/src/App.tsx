@@ -11,7 +11,6 @@ import AIInsightsPage from "./pages/AIInsights";
 import TestCases from "./pages/TestCases";
 import Defects from "./pages/Defects";
 import Releases from "./pages/Releases";
-import TestRunner from "./pages/TestRunner";
 import Playwright from "./pages/Playwright";
 import LoadTesting from "./pages/LoadTesting";
 import Settings from "./pages/Settings";
@@ -78,7 +77,7 @@ const App = () => {
               <Route path="/help/copilot" element={<ProtectedRoute element={<CopilotGuide />} />} />
               <Route path="/ai-insights" element={<ProtectedRoute element={<AIInsightsPage />} />} />
               <Route path="/test-cases" element={<ProtectedRoute element={<TestCases />} />} />
-              <Route path="/test-runner" element={<ProtectedRoute element={<TestRunner />} />} />
+              <Route path="/test-runner" element={<Navigate to="/playwright" replace />} />
               <Route path="/playwright" element={<ProtectedRoute element={<Playwright />} />} />
               <Route path="/load-testing" element={<ProtectedRoute element={<LoadTesting />} />} />
               <Route path="/defects" element={<ProtectedRoute element={<Defects />} />} />
