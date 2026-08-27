@@ -35,11 +35,12 @@ export async function releaseRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Get release by ID with readiness evaluation
+  // Get release by ID with readiness evaluation (or list releases for project)
   fastify.get('/api/releases/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const client = await pool.connect();
     try {
+      // 1. Check if ID is a release ID (rel_...)
       const res = await client.query(
         `SELECT rel.*,
                 p.name as project_name,
@@ -54,10 +55,28 @@ export async function releaseRoutes(fastify: FastifyInstance) {
          WHERE rel.id = $1`,
         [id]
       );
-      if (res.rows.length === 0) {
-        return reply.status(404).send({ error: 'Release not found' });
+      if (res.rows.length > 0) {
+        return reply.send(mapReleaseRow(res.rows[0]));
       }
-      return reply.send(mapReleaseRow(res.rows[0]));
+
+      // 2. Fallback: check if ID is a project ID (prj_...)
+      const projRes = await client.query(
+        `SELECT rel.*,
+                p.name as project_name,
+                (SELECT json_agg(json_build_object('id', ra.id, 'role', ra.role, 'approverName', ra.approver_name, 'status', ra.status, 'comments', ra.comments, 'updatedAt', ra.updated_at))
+                 FROM release_approvals ra WHERE ra.release_id = rel.id) as approvals,
+                (SELECT COUNT(*)::int FROM test_cases WHERE project_id = rel.project_id) as total_tests,
+                (SELECT COUNT(*)::int FROM test_cases WHERE project_id = rel.project_id AND status = 'passed') as passed_tests,
+                (SELECT COUNT(*)::int FROM defects WHERE project_id = rel.project_id AND status = 'open') as open_defects_count,
+                (SELECT COUNT(*)::int FROM defects WHERE project_id = rel.project_id AND status = 'open' AND severity = 'critical') as critical_defects_count
+         FROM releases rel
+         LEFT JOIN projects p ON rel.project_id = p.id
+         WHERE rel.project_id = $1
+         ORDER BY rel.created_at DESC`,
+        [id]
+      );
+
+      return reply.send(projRes.rows.map(mapReleaseRow));
     } finally {
       client.release();
     }
@@ -212,21 +231,32 @@ export async function releaseRoutes(fastify: FastifyInstance) {
 function mapReleaseRow(row: any) {
   return {
     id: row.id,
+    release_id: row.id,
     projectId: row.project_id,
+    project_id: row.project_id,
     projectName: row.project_name,
+    project_name: row.project_name,
     version: row.version,
     name: row.name,
     description: row.description,
     status: row.status,
     readinessScore: row.readiness_score ? parseFloat(row.readiness_score) : 0,
+    readiness_score: row.readiness_score ? parseFloat(row.readiness_score) : 0,
     recommendation: row.recommendation || 'NO-GO',
     targetDate: row.target_date,
+    target_date: row.target_date,
     totalTests: row.total_tests || 0,
-    passedTests: row.passedTests || 0,
+    total_tests: row.total_tests || 0,
+    passedTests: row.passed_tests || 0,
+    passed_tests: row.passed_tests || 0,
     openDefectsCount: row.open_defects_count || 0,
+    open_defects_count: row.open_defects_count || 0,
     criticalDefectsCount: row.critical_defects_count || 0,
+    critical_defects_count: row.critical_defects_count || 0,
     approvals: row.approvals || [],
     createdAt: row.created_at,
+    created_at: row.created_at,
     updatedAt: row.updated_at,
+    updated_at: row.updated_at,
   };
 }

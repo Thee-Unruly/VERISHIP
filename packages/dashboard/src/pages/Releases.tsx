@@ -40,11 +40,12 @@ export default function Releases() {
     })
       .then((res) => res.json())
       .then((data) => {
-        setReleases(data);
+        setReleases(Array.isArray(data) ? data : (data && !data.error ? [data] : []));
         setLoading(false);
       })
       .catch((err) => {
         console.error("Error fetching releases:", err);
+        setReleases([]);
         setLoading(false);
       });
   }
