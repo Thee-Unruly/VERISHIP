@@ -15,7 +15,14 @@ import {
   ShieldCheck,
   Clock,
   Layers,
-  ArrowUpRight
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  SlidersHorizontal,
+  ExternalLink,
+  Activity,
+  CheckSquare
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -83,6 +90,7 @@ export default function PlaywrightPage() {
   const [priority, setPriority] = useState<string>("interactive");
   const [headless, setHeadless] = useState<boolean>(true);
   const [browserType, setBrowserType] = useState<string>("chromium");
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
   // Projects list
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -94,13 +102,14 @@ export default function PlaywrightPage() {
   const [activeJob, setActiveJob] = useState<JobItem | null>(null);
   const [activeRun, setActiveRun] = useState<RunDetails | null>(null);
   const [steps, setSteps] = useState<StepLog[]>([]);
-  const [activeTab, setActiveTab] = useState<string>("video");
+  const [activeTab, setActiveTab] = useState<string>("live");
   const [specCode, setSpecCode] = useState<string | null>(null);
   const [memoryData, setMemoryData] = useState<any>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
   // History state
   const [recentJobs, setRecentJobs] = useState<JobItem[]>([]);
+  const [historySearch, setHistorySearch] = useState<string>("");
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -138,6 +147,8 @@ export default function PlaywrightPage() {
             fetchJobDetails(activeJobId);
           } else if (data.event === "job_completed") {
             fetchJobDetails(activeJobId);
+            fetchRecentJobs();
+            toast.success("Autonomous Playwright QA journey completed!");
           }
         } catch (e) {
           console.error("SSE parse error", e);
@@ -154,7 +165,7 @@ export default function PlaywrightPage() {
     // Polling fallback
     const interval = setInterval(() => {
       fetchJobDetails(activeJobId);
-    }, 2500);
+    }, 2000);
 
     return () => {
       clearInterval(interval);
@@ -192,6 +203,9 @@ export default function PlaywrightPage() {
         const data = await res.json();
         const list = Array.isArray(data) ? data : Array.isArray(data?.jobs) ? data.jobs : [];
         setRecentJobs(list);
+        if (list.length > 0 && !activeJobId) {
+          setActiveJobId(list[0].id);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch jobs", err);
@@ -216,12 +230,10 @@ export default function PlaywrightPage() {
           setSteps(data.steps);
         }
 
-        // If spec_url is present, fetch raw script content
         if (data.run?.spec_url) {
           fetchSpecCode(data.run.spec_url);
         }
 
-        // Fetch memory if completed
         if (data.job?.status === "completed" || data.job?.status === "failed") {
           fetchJobMemory(jobId);
         }
@@ -259,7 +271,7 @@ export default function PlaywrightPage() {
   const handlePresetSelect = (presetUrl: string, presetPrompt: string) => {
     setUrl(presetUrl);
     setPrompt(presetPrompt);
-    toast.info("Verification scenario preset loaded.");
+    toast.info("Scenario preset loaded.");
   };
 
   const handleLaunch = async (e: React.FormEvent) => {
@@ -274,6 +286,7 @@ export default function PlaywrightPage() {
     setSteps([]);
     setSpecCode(null);
     setMemoryData(null);
+    setActiveTab("live");
 
     try {
       const res = await fetch("/api/jobs", {
@@ -298,7 +311,7 @@ export default function PlaywrightPage() {
         return;
       }
 
-      toast.success(`Autonomous Agent Launched (Job: ${data.jobId.slice(0, 10)}...)`);
+      toast.success(`Autonomous Agent Launched (${data.jobId.slice(0, 12)}...)`);
       setActiveJobId(data.jobId);
       fetchRecentJobs();
     } catch (err: any) {
@@ -318,274 +331,340 @@ export default function PlaywrightPage() {
     toast.success("Playwright test script copied to clipboard.");
   };
 
+  const filteredJobs = recentJobs.filter((j) => {
+    if (!historySearch.trim()) return true;
+    const q = historySearch.toLowerCase();
+    return (
+      (j.prompt && j.prompt.toLowerCase().includes(q)) ||
+      (j.url && j.url.toLowerCase().includes(q)) ||
+      (j.id && j.id.toLowerCase().includes(q))
+    );
+  });
+
+  const isJobRunning = activeJob?.status === "pending" || activeJob?.status === "running";
+
   return (
     <DashboardLayout>
-      <div className="space-y-8 animate-fade-in">
-        {/* Page Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl">🎭</span>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Autonomous Playwright Test Runner
+      <div className="space-y-4">
+        {/* Top Slim Studio Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">🎭</span>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                Playwright Studio
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold">
+                  Autonomous QA v2
+                </Badge>
               </h1>
-              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 ml-2">
-                Playwright Engine v2
-              </Badge>
+              <p className="text-xs text-muted-foreground">
+                Natural-language browser test automation with live DOM streaming & artifact compilation
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Launch AI-driven browser test journeys with live DOM streaming, video recording, and auto-generated Playwright specs.
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="h-8 px-2.5 rounded-md border border-input bg-background text-xs font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">All Projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+
             <Button
               variant="outline"
               size="sm"
               onClick={fetchRecentJobs}
               disabled={refreshing}
-              className="gap-1.5"
+              className="h-8 text-xs gap-1 px-2.5"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh Runs
+              Refresh
             </Button>
           </div>
         </div>
 
-        {/* Preset Prompt Pills */}
-        <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <CardTitle className="text-sm font-semibold">Quick Verification Presets</CardTitle>
-            </div>
-            <CardDescription className="text-xs">
-              Select a pre-engineered test sequence or compose your custom natural language scenario below.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
-                onClick={() =>
-                  handlePresetSelect(
-                    "https://demo.playwright.dev/todomvc",
-                    "Add 3 todos: 'Verify login flow', 'Test checkout process', and 'Check defect dashboard'. Mark the second todo as completed, filter by Active, and assert that only 2 items remain."
-                  )
-                }
-              >
-                📝 TodoMVC CRUD & Filter Flow
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
-                onClick={() =>
-                  handlePresetSelect(
-                    "https://demo.app-approval.com",
-                    "Sign in as employee 'john.doe@company.com'. Submit a leave request for 3 days. Sign out. Sign in as manager 'sarah.manager@company.com', navigate to approvals queue, approve the pending leave request, and assert 'Approved' badge appears."
-                  )
-                }
-              >
-                🔄 Multi-Role Approval Workflow
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
-                onClick={() =>
-                  handlePresetSelect(
-                    "https://demo.ecom-store.com",
-                    "Navigate to shop. Search for Wireless Headphones, click first product, click Add to Cart, proceed to Checkout, fill shipping address, place order, and assert Order Confirmed."
-                  )
-                }
-              >
-                🛒 E-Commerce Checkout E2E Journey
-              </Button>
-
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="text-xs rounded-full bg-secondary/70 hover:bg-secondary border border-border/40"
-                onClick={() =>
-                  handlePresetSelect(
-                    "https://example.com",
-                    "Verify that the home page loads successfully, displays the main heading, and check that the More Information link is clickable."
-                  )
-                }
-              >
-                🛡️ Header & Smoke Verification
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Main Launcher & Config Card */}
-        <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <Play className="w-4 h-4 text-primary" />
-              Configure & Launch Autonomous QA Run
-            </CardTitle>
-            <CardDescription className="text-xs">
-              The autonomous agent will inspect the DOM, perform multi-step user actions, execute assertions, and compile artifacts.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent>
-            <form onSubmit={handleLaunch} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Target URL */}
-                <div className="md:col-span-2 space-y-1.5">
-                  <Label htmlFor="target-url" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Target Web Application URL *
-                  </Label>
-                  <Input
-                    id="target-url"
-                    type="url"
-                    required
-                    placeholder="https://app.yourdomain.com"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    className="font-mono text-sm bg-background/80"
-                  />
-                </div>
-
-                {/* Project Selector */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="project" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Link Project (Optional)
-                  </Label>
-                  <select
-                    id="project"
-                    value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background/80 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        {/* 2-Column Split Studio Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          
+          {/* ========================================================================= */}
+          {/* LEFT PANEL (35% - 4.5 cols): Launcher + Compact Preset Chips + History    */}
+          {/* ========================================================================= */}
+          <div className="lg:col-span-4 xl:col-span-4 space-y-4 flex flex-col">
+            
+            {/* Quick Test Launcher Card */}
+            <Card className="border shadow-sm bg-card">
+              <CardHeader className="pb-3 pt-4 px-4">
+                <CardTitle className="text-sm font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Play className="w-4 h-4 text-primary fill-primary" />
+                    Launch Autonomous Test
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-normal"
                   >
-                    <option value="">-- No Project Linked --</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                    <SlidersHorizontal className="w-3 h-3" />
+                    {showAdvanced ? "Less Options" : "Options"}
+                  </button>
+                </CardTitle>
+              </CardHeader>
 
-              {/* Goal / Prompt */}
-              <div className="space-y-1.5">
-                <Label htmlFor="goal-prompt" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Natural Language Verification Goal / Step Instructions *
-                </Label>
-                <Textarea
-                  id="goal-prompt"
-                  required
-                  rows={4}
-                  placeholder="Describe your testing sequence, assertions, form inputs, and expected outcomes..."
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  className="text-sm bg-background/80"
-                />
-              </div>
+              <CardContent className="px-4 pb-4 pt-0">
+                <form onSubmit={handleLaunch} className="space-y-3">
+                  {/* Target Base URL */}
+                  <div className="space-y-1">
+                    <Label htmlFor="target-url" className="text-[11px] font-semibold text-muted-foreground uppercase">
+                      Target URL *
+                    </Label>
+                    <Input
+                      id="target-url"
+                      type="url"
+                      required
+                      placeholder="https://demo.playwright.dev/todomvc"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      className="font-mono text-xs h-8 bg-background"
+                    />
+                  </div>
 
-              {/* Execution Options Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Execution Mode
-                  </Label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background/80 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  {/* Verification Goal / Prompt */}
+                  <div className="space-y-1">
+                    <Label htmlFor="goal-prompt" className="text-[11px] font-semibold text-muted-foreground uppercase">
+                      Test Goal & Verification Steps *
+                    </Label>
+                    <Textarea
+                      id="goal-prompt"
+                      required
+                      rows={3}
+                      placeholder="Describe what the Playwright agent should verify, click, fill, or assert..."
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      className="text-xs font-mono leading-relaxed bg-background resize-none"
+                    />
+                  </div>
+
+                  {/* Quick Preset Chips */}
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block">
+                      Quick Presets
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handlePresetSelect(
+                            "https://demo.playwright.dev/todomvc",
+                            "Add 3 todos: 'Verify login flow', 'Test checkout process', and 'Check defect dashboard'. Mark the second todo as completed, filter by Active, and assert that only 2 items remain."
+                          )
+                        }
+                        className="px-2 py-0.5 rounded text-[11px] bg-secondary/80 hover:bg-secondary border border-border text-foreground font-medium transition-colors"
+                      >
+                        📝 TodoMVC CRUD
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handlePresetSelect(
+                            "https://demo.app-approval.com",
+                            "Sign in as employee 'john.doe@company.com'. Submit a leave request for 3 days. Sign out. Sign in as manager, navigate to approvals queue, approve request, and assert 'Approved' badge."
+                          )
+                        }
+                        className="px-2 py-0.5 rounded text-[11px] bg-secondary/80 hover:bg-secondary border border-border text-foreground font-medium transition-colors"
+                      >
+                        🔄 Approval Flow
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handlePresetSelect(
+                            "https://example.com",
+                            "Verify that the home page loads successfully, displays the main heading, and check that the More Information link is clickable."
+                          )
+                        }
+                        className="px-2 py-0.5 rounded text-[11px] bg-secondary/80 hover:bg-secondary border border-border text-foreground font-medium transition-colors"
+                      >
+                        🛡️ Smoke Verification
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Advanced Options (Collapsible) */}
+                  {showAdvanced && (
+                    <div className="pt-2 border-t space-y-2.5 animate-fade-in text-xs">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                            Browser Engine
+                          </Label>
+                          <select
+                            value={browserType}
+                            onChange={(e) => setBrowserType(e.target.value)}
+                            className="w-full h-7 px-2 rounded border bg-background text-xs"
+                          >
+                            <option value="chromium">Chromium</option>
+                            <option value="firefox">Firefox</option>
+                            <option value="webkit">WebKit (Safari)</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                            Display Mode
+                          </Label>
+                          <select
+                            value={headless ? "headless" : "headed"}
+                            onChange={(e) => setHeadless(e.target.value === "headless")}
+                            className="w-full h-7 px-2 rounded border bg-background text-xs"
+                          >
+                            <option value="headless">Headless</option>
+                            <option value="headed">Headed</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error Banner */}
+                  {error && (
+                    <div className="p-2 rounded bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+                      {error}
+                    </div>
+                  )}
+
+                  {/* Launch Button */}
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-9 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs gap-1.5 shadow-sm"
                   >
-                    <option value="interactive">Interactive (Real-Time Container)</option>
-                    <option value="scheduled">Batch (Background Execution)</option>
-                  </select>
-                </div>
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Spawning Browser Container...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        Execute Autonomous Test
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Browser Engine
-                  </Label>
-                  <select
-                    value={browserType}
-                    onChange={(e) => setBrowserType(e.target.value)}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background/80 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="chromium">Chromium (Google Chrome)</option>
-                    <option value="firefox">Firefox</option>
-                    <option value="webkit">WebKit (Safari)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Display Mode
-                  </Label>
-                  <select
-                    value={headless ? "headless" : "headed"}
-                    onChange={(e) => setHeadless(e.target.value === "headless")}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background/80 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="headless">Headless (Fastest in Container)</option>
-                    <option value="headed">Headed (Visual Display)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Error Alert */}
-              {error && (
-                <div className="p-3.5 rounded-lg bg-destructive/15 border border-destructive/30 text-destructive text-sm flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 flex-shrink-0" />
-                  <div>
-                    <span className="font-bold">Ingress Protection Notice:</span> {error}
+            {/* Run History List Card */}
+            <Card className="border shadow-sm bg-card flex flex-col flex-1">
+              <CardHeader className="pb-2 pt-3 px-4 border-b">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                    <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Execution History ({filteredJobs.length})
+                    </CardTitle>
                   </div>
                 </div>
-              )}
 
-              {/* Submit Button */}
-              <div className="pt-2 flex justify-end">
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="px-6 h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold gap-2 shadow-lg shadow-primary/20"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Initializing Agent Container...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4" />
-                      Launch Autonomous QA Run
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                <div className="relative mt-2">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search runs by URL or goal..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="h-7 pl-8 text-xs bg-background"
+                  />
+                </div>
+              </CardHeader>
 
-        {/* Live Execution Inspector (Visible when activeJobId is set) */}
-        {activeJobId && (
-          <div className="space-y-6">
-            {/* Run Status Header Banner */}
-            <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
-              <CardContent className="p-5">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <CardContent className="p-2 max-h-[360px] overflow-y-auto space-y-1">
+                {filteredJobs.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-muted-foreground">
+                    No matching runs found.
+                  </div>
+                ) : (
+                  filteredJobs.map((job) => {
+                    const isSelected = activeJobId === job.id;
+                    const isPassed = job.status === "completed" || (job as any).run_status === "completed" || (job as any).taxonomy === "PASSED";
+                    const isFailed = job.status === "failed" || (job as any).run_status === "failed";
+                    const isPending = job.status === "pending" || job.status === "running";
+
+                    return (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveJobId(job.id);
+                          fetchJobDetails(job.id);
+                        }}
+                        className={`w-full text-left p-2.5 rounded-lg border transition-all ${
+                          isSelected
+                            ? "bg-primary/10 border-primary/40 shadow-sm"
+                            : "bg-background/60 hover:bg-accent/40 border-border/60"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                isPassed
+                                  ? "bg-emerald-500"
+                                  : isFailed
+                                  ? "bg-destructive"
+                                  : isPending
+                                  ? "bg-blue-500 animate-pulse"
+                                  : "bg-slate-400"
+                              }`}
+                            />
+                            <span className="font-mono text-[11px] font-semibold truncate text-foreground">
+                              {job.id}
+                            </span>
+                          </div>
+
+                          <Badge
+                            variant={isPassed ? "default" : isFailed ? "destructive" : "secondary"}
+                            className="text-[10px] py-0 px-1.5 h-4 capitalize shrink-0 font-normal"
+                          >
+                            {isPending ? "Running" : isPassed ? "Pass" : "Fail"}
+                          </Badge>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground line-clamp-1 mb-1 font-mono">
+                          {job.prompt}
+                        </p>
+
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span className="truncate max-w-[160px]">{job.url}</span>
+                          <span>{new Date(job.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+
+          </div>
+
+
+          {/* ========================================================================= */}
+          {/* RIGHT PANEL (65% - 7.5 cols): Live Studio Inspector Viewport              */}
+          {/* ========================================================================= */}
+          <div className="lg:col-span-8 xl:col-span-8 space-y-4">
+            
+            {activeJobId ? (
+              <Card className="border shadow-sm bg-card overflow-hidden">
+                {/* Active Run Header Bar */}
+                <div className="p-4 border-b bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                      <span className="font-mono text-xs font-bold text-foreground bg-background px-2 py-0.5 rounded border">
                         {activeJob?.id || activeJobId}
                       </span>
                       <Badge
@@ -596,405 +675,281 @@ export default function PlaywrightPage() {
                             ? "destructive"
                             : "secondary"
                         }
-                        className="capitalize text-xs"
+                        className="capitalize text-xs font-semibold px-2 py-0.5"
                       >
-                        {activeJob?.status === "running" ? "⚡ Running in Playwright Engine" : activeJob?.status || "Processing"}
+                        {isJobRunning ? (
+                          <span className="flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Executing Agent ({steps.length} steps)
+                          </span>
+                        ) : activeJob?.status || "Ready"}
                       </Badge>
-                      {activeRun?.taxonomy && (
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {activeRun.taxonomy}
+
+                      {activeRun?.fitness_score !== undefined && (
+                        <Badge variant="outline" className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300">
+                          Fitness: {activeRun.fitness_score}%
                         </Badge>
                       )}
+
+                      {activeRun?.duration_ms && (
+                        <span className="text-xs text-muted-foreground font-mono flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {(activeRun.duration_ms / 1000).toFixed(1)}s
+                        </span>
+                      )}
                     </div>
-                    <p className="text-sm font-semibold text-foreground truncate max-w-xl">
-                      {activeJob?.url || url}
+
+                    <p className="text-xs text-muted-foreground line-clamp-1 font-mono">
+                      Target: <strong className="text-foreground">{activeJob?.url || url}</strong>
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-primary" />
-                      <span>
-                        Duration:{" "}
-                        <strong className="text-foreground font-mono">
-                          {activeRun?.duration_ms ? `${(activeRun.duration_ms / 1000).toFixed(1)}s` : "In Progress..."}
-                        </strong>
-                      </span>
-                    </div>
+                  {/* Artifact Quick Actions */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {activeRun?.trace_url && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="h-8 text-xs gap-1 border-purple-300 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/50"
+                      >
+                        <a href={activeRun.trace_url} download="playwright-trace.zip">
+                          <FileDown className="w-3.5 h-3.5" />
+                          Trace ZIP
+                        </a>
+                      </Button>
+                    )}
 
-                    <div className="flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-primary" />
-                      <span>
-                        Steps: <strong className="text-foreground font-mono">{steps.length}</strong>
-                      </span>
-                    </div>
-
-                    {activeRun?.fitness_score != null && (
-                      <div className="flex items-center gap-1.5 bg-primary/10 px-3 py-1 rounded-md border border-primary/20">
-                        <span className="font-bold text-primary font-mono text-sm">
-                          {activeRun.fitness_score}% Fitness Score
-                        </span>
-                      </div>
+                    {specCode && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={copySpecToClipboard}
+                        className="h-8 text-xs gap-1"
+                      >
+                        {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copied ? "Copied" : "Copy Spec"}
+                      </Button>
                     )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Split Screen Inspector: Left = Steps Timeline, Right = Artifact Tabs */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left Column: Live Steps Stream */}
-              <div className="lg:col-span-5 space-y-4">
-                <Card className="border-border/60 bg-card/60 backdrop-blur-md min-h-[620px] h-[620px] flex flex-col shadow-sm">
-                  <CardHeader className="py-3.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-primary" />
-                      <CardTitle className="text-sm font-bold">Execution Timeline</CardTitle>
-                    </div>
-                    <span className="text-xs font-mono text-muted-foreground">
-                      {steps.length} actions logged
-                    </span>
-                  </CardHeader>
+                {/* Viewport Tabs */}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                  <div className="px-4 border-b bg-background">
+                    <TabsList className="bg-transparent h-10 p-0 gap-4">
+                      <TabsTrigger
+                        value="live"
+                        className="data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent rounded-none px-1 text-xs font-semibold flex items-center gap-1.5 h-10"
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        Live Steps ({steps.length})
+                      </TabsTrigger>
 
-                  <CardContent className="p-3 flex-1 overflow-y-auto space-y-2.5 font-mono text-xs">
-                    {steps.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-6 text-center">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                        <p className="text-xs">Connecting to headless Playwright worker...</p>
-                      </div>
-                    ) : (
-                      steps.map((s, idx) => (
-                        <div
-                          key={s.id || idx}
-                          className="p-3 rounded-lg border border-border/50 bg-background/60 hover:bg-background/90 transition-all space-y-2 shadow-sm"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
-                                {s.step_number}
-                              </span>
-                              <span className="font-semibold text-foreground text-xs">
-                                {s.tool_call_name || "action"}
-                              </span>
-                            </div>
-                            <Badge variant="outline" className="text-[10px] font-normal py-0">
-                              {s.duration_ms ? `${s.duration_ms}ms` : "ok"}
-                            </Badge>
-                          </div>
+                      <TabsTrigger
+                        value="video"
+                        className="data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent rounded-none px-1 text-xs font-semibold flex items-center gap-1.5 h-10"
+                      >
+                        <Film className="w-3.5 h-3.5" />
+                        Session Video
+                      </TabsTrigger>
 
-                          <p className="text-muted-foreground text-[11px] font-sans leading-relaxed">
-                            {s.action_taken}
+                      <TabsTrigger
+                        value="spec"
+                        className="data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent rounded-none px-1 text-xs font-semibold flex items-center gap-1.5 h-10"
+                      >
+                        <Code className="w-3.5 h-3.5" />
+                        Playwright Spec (.ts)
+                      </TabsTrigger>
+
+                      <TabsTrigger
+                        value="memory"
+                        className="data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none border-b-2 border-transparent rounded-none px-1 text-xs font-semibold flex items-center gap-1.5 h-10"
+                      >
+                        <Brain className="w-3.5 h-3.5" />
+                        Assertions & Memory
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+
+                  <CardContent className="p-4 min-h-[460px] max-h-[580px] overflow-y-auto">
+                    
+                    {/* TAB 1: Live Steps & Timeline */}
+                    <TabsContent value="live" className="m-0 space-y-2.5">
+                      {steps.length === 0 ? (
+                        <div className="py-20 text-center text-muted-foreground space-y-2">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                          <p className="text-xs font-medium">
+                            {isJobRunning
+                              ? "Headless Playwright browser initialising and navigating..."
+                              : "No steps recorded for this run."}
                           </p>
-
-                          {s.tool_args && Object.keys(s.tool_args).length > 0 && (
-                            <div className="bg-muted/80 p-2 rounded border border-border/50 text-[11px] font-mono text-foreground overflow-x-auto">
-                              {JSON.stringify(s.tool_args, null, 2)}
-                            </div>
-                          )}
-
-                          {s.screenshot_url && (
-                            <div className="pt-1.5 border-t border-border/30">
-                              <a
-                                href={s.screenshot_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="group relative block overflow-hidden rounded border border-border/60 bg-black/60 max-h-28"
-                              >
-                                <img
-                                  src={s.screenshot_url}
-                                  alt={`DOM step ${s.step_number}`}
-                                  className="w-full h-24 object-cover object-top group-hover:scale-105 transition-transform duration-200"
-                                  loading="lazy"
-                                />
-                                <span className="absolute bottom-1 right-1 bg-black/85 text-[9px] text-white px-1.5 py-0.5 rounded flex items-center gap-1 font-sans">
-                                  <ArrowUpRight className="w-2.5 h-2.5" /> View Screenshot
-                                </span>
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Right Column: Artifacts & Inspectors (Video, Spec Code, Memory) */}
-              <div className="lg:col-span-7">
-                <Card className="border-border/60 bg-card/60 backdrop-blur-md min-h-[620px] h-[620px] flex flex-col shadow-sm overflow-hidden">
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between bg-card/40 flex-shrink-0">
-                      <TabsList className="bg-secondary/50">
-                        <TabsTrigger value="video" className="text-xs gap-1.5">
-                          <Film className="w-3.5 h-3.5 text-primary" />
-                          Session Video
-                        </TabsTrigger>
-                        <TabsTrigger value="code" className="text-xs gap-1.5">
-                          <Code className="w-3.5 h-3.5 text-primary" />
-                          Playwright Spec
-                        </TabsTrigger>
-                        <TabsTrigger value="memory" className="text-xs gap-1.5">
-                          <Brain className="w-3.5 h-3.5 text-primary" />
-                          Agent Memory
-                        </TabsTrigger>
-                      </TabsList>
-
-                      {activeTab === "code" && specCode && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={copySpecToClipboard}
-                          className="h-7 text-xs gap-1 hover:bg-primary/10"
-                        >
-                          {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                          {copied ? "Copied" : "Copy Code"}
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Tab 1: Video Player */}
-                    <TabsContent value="video" className="flex-1 min-h-0 p-3 m-0 data-[state=active]:flex flex-col justify-between overflow-hidden">
-                      {activeRun?.video_url ? (
-                        <div className="w-full h-full flex flex-col justify-between min-h-0 space-y-2">
-                          <div className="w-full flex-1 min-h-0 rounded-lg overflow-hidden border border-border/60 bg-black flex items-center justify-center relative shadow-inner">
-                            <video
-                              key={activeRun.video_url}
-                              src={activeRun.video_url}
-                              controls
-                              autoPlay
-                              playsInline
-                              className="w-full h-full object-contain"
-                            />
-                          </div>
-                          <div className="flex items-center justify-between w-full text-xs text-muted-foreground font-mono px-1 pt-1 flex-shrink-0">
-                            <span className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                              Format: WebM Session Recording
-                            </span>
-                            <a
-                              href={activeRun.video_url}
-                              download="recording.webm"
-                              className="text-primary hover:underline flex items-center gap-1 font-medium"
-                            >
-                              <FileDown className="w-3.5 h-3.5" />
-                              Download Recording
-                            </a>
-                          </div>
                         </div>
                       ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 text-muted-foreground">
-                          <Film className="w-12 h-12 stroke-[1.2] animate-pulse text-primary" />
-                          <div className="space-y-1">
-                            <p className="font-semibold text-foreground text-sm">Session Recording in Progress</p>
-                            <p className="text-xs max-w-sm">
-                              The browser session is being captured frame-by-frame. The WebM recording compiles automatically upon run completion.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </TabsContent>
+                        steps.map((step, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-lg border bg-card/80 hover:bg-accent/20 transition-colors flex items-start gap-3"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                              {step.step_number}
+                            </div>
 
-                    {/* Tab 2: Generated Playwright Spec Code */}
-                    <TabsContent value="code" className="flex-1 min-h-0 p-3 m-0 data-[state=active]:flex flex-col justify-between overflow-hidden">
-                      {specCode ? (
-                        <div className="w-full h-full flex flex-col justify-between min-h-0 space-y-2">
-                          <pre className="w-full flex-1 min-h-0 p-4 rounded-lg bg-zinc-950 border border-border/60 text-emerald-400 font-mono text-xs overflow-auto leading-relaxed shadow-inner selection:bg-primary selection:text-white">
-                            <code>{specCode}</code>
-                          </pre>
-                          <div className="flex items-center justify-between text-xs text-muted-foreground font-mono px-1 pt-1 flex-shrink-0">
-                            <span className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full bg-primary" />
-                              Ready for CI/CD (`npx playwright test`)
-                            </span>
-                            {activeRun?.spec_url && (
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-xs text-foreground font-mono">
+                                  {step.tool_call_name ? `Browser: ${step.tool_call_name}` : "Agent Step"}
+                                </span>
+                                {step.duration_ms && (
+                                  <span className="text-[10px] text-muted-foreground font-mono">
+                                    {step.duration_ms}ms
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                                {step.action_taken || step.tool_result}
+                              </p>
+                            </div>
+
+                            {step.screenshot_url && (
                               <a
-                                href={activeRun.spec_url}
-                                download="test.spec.ts"
-                                className="text-primary hover:underline flex items-center gap-1 font-medium"
+                                href={step.screenshot_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="shrink-0 border rounded overflow-hidden hover:opacity-80 transition-opacity block"
+                                title="Click to view full screenshot"
                               >
-                                <FileDown className="w-3.5 h-3.5" />
-                                Download .spec.ts
+                                <img
+                                  src={step.screenshot_url}
+                                  alt={`Step ${step.step_number}`}
+                                  className="w-20 h-12 object-cover"
+                                />
                               </a>
                             )}
                           </div>
+                        ))
+                      )}
+                    </TabsContent>
+
+                    {/* TAB 2: Session Video Player */}
+                    <TabsContent value="video" className="m-0">
+                      {activeRun?.video_url ? (
+                        <div className="rounded-lg overflow-hidden border bg-black shadow-inner">
+                          <video
+                            src={activeRun.video_url}
+                            controls
+                            autoPlay
+                            className="w-full max-h-[460px] mx-auto"
+                          />
                         </div>
                       ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 text-muted-foreground">
-                          <Code className="w-12 h-12 stroke-[1.2] text-muted-foreground" />
-                          <div className="space-y-1">
-                            <p className="font-semibold text-foreground text-sm">Synthesizing Playwright Spec Script</p>
-                            <p className="text-xs max-w-sm">
-                              The AI engine translates executed action steps into resilient, reproducible Playwright code.
-                            </p>
-                          </div>
+                        <div className="py-24 text-center border border-dashed rounded-lg text-muted-foreground space-y-2">
+                          <Film className="w-8 h-8 mx-auto text-muted-foreground/60" />
+                          <p className="text-xs font-medium">
+                            {isJobRunning
+                              ? "Recording browser session in WebM format... Video will render once completed."
+                              : "No session video recorded for this execution."}
+                          </p>
                         </div>
                       )}
                     </TabsContent>
 
-                    {/* Tab 3: Agent Memory & Assertions */}
-                    <TabsContent value="memory" className="flex-1 min-h-0 p-3 m-0 data-[state=active]:flex flex-col overflow-y-auto space-y-3.5">
-                      <div className="p-3.5 rounded-lg border border-border/60 bg-background/60 space-y-1.5 shadow-sm flex-shrink-0">
-                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Structured Execution Summary
-                        </span>
-                        <p className="text-sm text-foreground leading-relaxed">
-                          {memoryData?.structured_summary || "Evaluating agent memory upon step completion..."}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 flex-shrink-0">
-                        {/* Passed Assertions */}
-                        <div className="p-3.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 space-y-2">
-                          <div className="flex items-center gap-1.5 text-emerald-500 text-xs font-bold">
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>PASSED ASSERTIONS ({memoryData?.passed_assertions?.length || 0})</span>
-                          </div>
-                          {memoryData?.passed_assertions?.length > 0 ? (
-                            <ul className="space-y-1 text-xs text-foreground font-sans">
-                              {memoryData.passed_assertions.map((a: string, i: number) => (
-                                <li key={i} className="flex items-start gap-1.5">
-                                  <span className="text-emerald-500 font-bold">•</span>
-                                  <span>{a}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-xs text-muted-foreground italic">No passed assertions recorded yet</p>
-                          )}
-                        </div>
-
-                        {/* Failed Assertions */}
-                        <div className="p-3.5 rounded-lg border border-destructive/30 bg-destructive/5 space-y-2">
-                          <div className="flex items-center gap-1.5 text-destructive text-xs font-bold">
-                            <XCircle className="w-4 h-4" />
-                            <span>FAILED ASSERTIONS ({memoryData?.failed_assertions?.length || 0})</span>
-                          </div>
-                          {memoryData?.failed_assertions?.length > 0 ? (
-                            <ul className="space-y-1 text-xs text-destructive font-sans">
-                              {memoryData.failed_assertions.map((a: string, i: number) => (
-                                <li key={i} className="flex items-start gap-1.5">
-                                  <span className="font-bold">•</span>
-                                  <span>{a}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-xs text-muted-foreground italic">Zero assertion failures recorded</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* DOM Selector Cache */}
-                      <div className="p-4 rounded-lg border border-border/80 bg-zinc-950 text-zinc-100 space-y-2 font-mono text-xs shadow-inner flex-1 min-h-[180px] flex flex-col">
-                        <div className="flex items-center justify-between pb-2 border-b border-zinc-800 flex-shrink-0">
-                          <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5 uppercase tracking-wider">
-                            <Brain className="w-3.5 h-3.5 text-sky-400" />
-                            DOM Selector Cache & Heuristics
-                          </span>
-                          <span className="text-[10px] text-zinc-400 font-mono">
-                            JSON Inspector
-                          </span>
-                        </div>
-                        <pre className="overflow-auto text-xs text-emerald-400 font-mono flex-1 p-3 rounded bg-black/80 border border-zinc-850 selection:bg-primary selection:text-white leading-relaxed">
-                          {memoryData?.selector_cache && Object.keys(memoryData.selector_cache).length > 0
-                            ? JSON.stringify(memoryData.selector_cache, null, 2)
-                            : "// No selectors cached yet. Elements are cached dynamically as agent executes DOM actions."}
+                    {/* TAB 3: Generated Playwright Spec Code */}
+                    <TabsContent value="spec" className="m-0">
+                      <div className="relative">
+                        <pre className="p-4 rounded-lg bg-slate-950 text-slate-100 font-mono text-xs leading-relaxed overflow-x-auto max-h-[460px] border">
+                          {specCode ||
+                            `// Playwright Spec Generated by VeriShip Autonomous Engine\nimport { test, expect } from '@playwright/test';\n\ntest('Autonomous QA Journey', async ({ page }) => {\n  await page.goto('${activeJob?.url || url}');\n  // Steps compiling...\n});`}
                         </pre>
                       </div>
                     </TabsContent>
-                  </Tabs>
-                </Card>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Live Run Execution History Table */}
-        <Card className="border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">Run Execution History</CardTitle>
-            <CardDescription className="text-xs">
-              Recent autonomous test runs executed through the Playwright BullMQ worker pool.
-            </CardDescription>
-          </CardHeader>
+                    {/* TAB 4: Assertions & Run Memory */}
+                    <TabsContent value="memory" className="m-0 space-y-4">
+                      {memoryData ? (
+                        <div className="space-y-4 text-xs">
+                          {/* Passed Assertions */}
+                          <div className="space-y-2">
+                            <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                              Passed Assertions ({memoryData.passed_assertions?.length || 0})
+                            </h4>
+                            {Array.isArray(memoryData.passed_assertions) && memoryData.passed_assertions.length > 0 ? (
+                              <ul className="space-y-1 font-mono pl-5 list-disc text-muted-foreground">
+                                {memoryData.passed_assertions.map((a: string, i: number) => (
+                                  <li key={i}>{a}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-muted-foreground">No explicit assertions logged.</p>
+                            )}
+                          </div>
 
-          <CardContent className="p-0">
-            {recentJobs.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground text-sm">
-                No past executions found. Launch your first run above to start monitoring.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-border/60 text-xs uppercase tracking-wider text-muted-foreground bg-secondary/30">
-                      <th className="py-3 px-4 font-semibold">Job ID</th>
-                      <th className="py-3 px-4 font-semibold">Target URL</th>
-                      <th className="py-3 px-4 font-semibold">Status</th>
-                      <th className="py-3 px-4 font-semibold">Taxonomy</th>
-                      <th className="py-3 px-4 font-semibold">Fitness</th>
-                      <th className="py-3 px-4 font-semibold">Date</th>
-                      <th className="py-3 px-4 font-semibold text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/40">
-                    {recentJobs.map((job) => (
-                      <tr key={job.id} className="hover:bg-muted/40 transition-colors">
-                        <td className="py-3.5 px-4 font-mono text-xs text-primary font-semibold">
-                          {job.id.slice(0, 14)}...
-                        </td>
-                        <td className="py-3.5 px-4 font-medium max-w-[240px] truncate text-foreground">
-                          {job.url}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <Badge
-                            variant={
-                              job.status === "completed" || job.status === "passed"
-                                ? "default"
-                                : job.status === "failed"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                            className="capitalize text-[11px]"
-                          >
-                            {job.status}
-                          </Badge>
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-xs">
-                          {job.taxonomy ? (
-                            <span className="text-muted-foreground">{job.taxonomy}</span>
-                          ) : (
-                            <span className="text-muted-foreground/60">—</span>
+                          {/* Failed Assertions */}
+                          {Array.isArray(memoryData.failed_assertions) && memoryData.failed_assertions.length > 0 && (
+                            <div className="space-y-2 pt-2 border-t">
+                              <h4 className="font-semibold text-destructive flex items-center gap-1.5">
+                                <XCircle className="w-4 h-4" />
+                                Failed Assertions ({memoryData.failed_assertions.length})
+                              </h4>
+                              <ul className="space-y-1 font-mono pl-5 list-disc text-destructive">
+                                {memoryData.failed_assertions.map((a: string, i: number) => (
+                                  <li key={i}>{a}</li>
+                                ))}
+                              </ul>
+                            </div>
                           )}
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-xs font-bold text-primary">
-                          {job.fitness_score != null ? `${job.fitness_score}%` : "—"}
-                        </td>
-                        <td className="py-3.5 px-4 text-xs text-muted-foreground">
-                          {new Date(job.created_at).toLocaleString()}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setActiveJobId(job.id);
-                              window.scrollTo({ top: 400, behavior: "smooth" });
-                            }}
-                            className="h-7 text-xs gap-1"
-                          >
-                            Inspect Run
-                            <ArrowUpRight className="w-3 h-3" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+
+                          {/* Selector Cache */}
+                          {memoryData.selector_cache && Object.keys(memoryData.selector_cache).length > 0 && (
+                            <div className="space-y-2 pt-2 border-t">
+                              <h4 className="font-semibold text-foreground">Discovered DOM Selector Cache:</h4>
+                              <div className="p-3 rounded bg-muted/40 font-mono text-[11px] space-y-1">
+                                {Object.entries(memoryData.selector_cache).map(([k, v]: any) => (
+                                  <div key={k} className="flex justify-between gap-2 border-b border-border/40 pb-1">
+                                    <span className="text-muted-foreground">{k}</span>
+                                    <span className="text-foreground font-semibold">{String(v)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="py-20 text-center text-muted-foreground text-xs">
+                          {isJobRunning ? "Analyzing DOM state and assertions..." : "No structured memory records found."}
+                        </div>
+                      )}
+                    </TabsContent>
+
+                  </CardContent>
+                </Tabs>
+              </Card>
+            ) : (
+              /* Sleek Empty State when no run is selected */
+              <Card className="border border-dashed shadow-sm bg-card/60 p-12 text-center flex flex-col items-center justify-center min-h-[520px]">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+                  <Play className="w-6 h-6 fill-primary" />
+                </div>
+                <h3 className="text-base font-bold text-foreground mb-1">Playwright Autonomous Studio</h3>
+                <p className="text-xs text-muted-foreground max-w-md mb-6 leading-relaxed">
+                  Compose a verification prompt on the left or select a previous test run to inspect live steps, full session video, and copy-pasteable TypeScript test specs.
+                </p>
+                <Button
+                  onClick={handleLaunch}
+                  disabled={loading}
+                  className="text-xs gap-2 bg-primary text-primary-foreground font-semibold"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Run Default TodoMVC Test
+                </Button>
+              </Card>
             )}
-          </CardContent>
-        </Card>
+
+          </div>
+
+        </div>
       </div>
     </DashboardLayout>
   );
