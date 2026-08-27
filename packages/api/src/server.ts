@@ -22,6 +22,18 @@ const fastify = Fastify({
   ignoreTrailingSlash: true,
 });
 
+fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+  try {
+    if (!body || (typeof body === 'string' && body.trim() === '')) {
+      return done(null, {});
+    }
+    const json = JSON.parse(body as string);
+    return done(null, json);
+  } catch (err: any) {
+    return done(err, undefined);
+  }
+});
+
 const PORT = parseInt(process.env.PORT || '4000', 10);
 
 async function start() {

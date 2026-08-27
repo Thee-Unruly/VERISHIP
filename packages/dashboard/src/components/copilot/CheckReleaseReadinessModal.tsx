@@ -47,15 +47,12 @@ export function CheckReleaseReadinessModal({
         try {
 
             const response = await fetch(`/api/copilot/check-release-readiness/${releaseId}`, {
-
                 method: "POST",
-
                 headers: {
-
                     "Content-Type": "application/json",
-
+                    "Authorization": `Bearer ${localStorage.getItem("authToken")}`
                 },
-
+                body: JSON.stringify({}),
             });
 
 
