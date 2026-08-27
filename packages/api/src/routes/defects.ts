@@ -5,6 +5,18 @@ import { CreateDefectInput } from '@universal-qa/shared';
 import { AIService } from '../services/aiService';
 
 export async function defectRoutes(fastify: FastifyInstance) {
+  const selectQueryBase = `
+    SELECT d.*,
+           tc.title as test_case_title,
+           tc.requirement_id as requirement_id,
+           r.title as requirement_title,
+           p.name as project_name
+    FROM defects d
+    LEFT JOIN test_cases tc ON d.test_case_id = tc.id
+    LEFT JOIN requirements r ON tc.requirement_id = r.id
+    LEFT JOIN projects p ON d.project_id = p.id
+  `;
+
   // List defects
   fastify.get('/api/defects', async (request, reply) => {
     const { projectId, status, severity } = request.query as {
@@ -14,27 +26,27 @@ export async function defectRoutes(fastify: FastifyInstance) {
     };
     const client = await pool.connect();
     try {
-      let query = `SELECT * FROM defects`;
+      let query = selectQueryBase;
       const conditions: string[] = [];
       const params: any[] = [];
 
       if (projectId) {
         params.push(projectId);
-        conditions.push(`project_id = $${params.length}`);
+        conditions.push(`d.project_id = $${params.length}`);
       }
       if (status) {
         params.push(status);
-        conditions.push(`status = $${params.length}`);
+        conditions.push(`d.status = $${params.length}`);
       }
       if (severity) {
         params.push(severity);
-        conditions.push(`severity = $${params.length}`);
+        conditions.push(`d.severity = $${params.length}`);
       }
 
       if (conditions.length > 0) {
         query += ` WHERE ${conditions.join(' AND ')}`;
       }
-      query += ` ORDER BY created_at DESC`;
+      query += ` ORDER BY d.created_at DESC`;
 
       const res = await client.query(query, params);
       return reply.send(res.rows.map(mapDefectRow));
@@ -49,13 +61,13 @@ export async function defectRoutes(fastify: FastifyInstance) {
     const client = await pool.connect();
     try {
       // First check if id is a defect ID
-      const res = await client.query(`SELECT * FROM defects WHERE id = $1`, [id]);
+      const res = await client.query(`${selectQueryBase} WHERE d.id = $1`, [id]);
       if (res.rows.length > 0) {
         return reply.send(mapDefectRow(res.rows[0]));
       }
 
       // Fallback: check if id is a project_id
-      const projRes = await client.query(`SELECT * FROM defects WHERE project_id = $1 ORDER BY created_at DESC`, [id]);
+      const projRes = await client.query(`${selectQueryBase} WHERE d.project_id = $1 ORDER BY d.created_at DESC`, [id]);
       return reply.send(projRes.rows.map(mapDefectRow));
     } finally {
       client.release();
@@ -88,14 +100,13 @@ export async function defectRoutes(fastify: FastifyInstance) {
 
     const client = await pool.connect();
     try {
-      const res = await client.query(
+      await client.query(
         `INSERT INTO defects (
           id, project_id, run_id, test_case_id, title, description,
           severity, status, root_cause_analysis, suggested_fix,
           reproduction_steps, screenshot_url, trace_url
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         [
           id,
           projectId,
@@ -112,7 +123,9 @@ export async function defectRoutes(fastify: FastifyInstance) {
           body.traceUrl || body.trace_url || null,
         ]
       );
-      return reply.status(201).send(mapDefectRow(res.rows[0]));
+
+      const fetchRes = await client.query(`${selectQueryBase} WHERE d.id = $1`, [id]);
+      return reply.status(201).send(mapDefectRow(fetchRes.rows[0]));
     } finally {
       client.release();
     }
@@ -138,7 +151,8 @@ export async function defectRoutes(fastify: FastifyInstance) {
       if (res.rows.length === 0) {
         return reply.status(404).send({ error: 'Defect not found' });
       }
-      return reply.send(mapDefectRow(res.rows[0]));
+      const fetchRes = await client.query(`${selectQueryBase} WHERE d.id = $1`, [id]);
+      return reply.send(mapDefectRow(fetchRes.rows[0]));
     } finally {
       client.release();
     }
@@ -160,19 +174,39 @@ export async function defectRoutes(fastify: FastifyInstance) {
 function mapDefectRow(row: any) {
   return {
     id: row.id,
+    defect_id: row.id,
+    defectId: row.id,
     projectId: row.project_id,
+    project_id: row.project_id,
+    projectName: row.project_name,
+    project_name: row.project_name,
     runId: row.run_id,
+    run_id: row.run_id,
     testCaseId: row.test_case_id,
+    test_case_id: row.test_case_id,
+    testCaseTitle: row.test_case_title,
+    test_case_title: row.test_case_title,
+    requirementId: row.requirement_id,
+    requirement_id: row.requirement_id,
+    requirementTitle: row.requirement_title,
+    requirement_title: row.requirement_title,
     title: row.title,
     description: row.description,
-    severity: row.severity,
+    severity: (row.severity || 'medium').toUpperCase(),
     status: row.status,
     rootCauseAnalysis: row.root_cause_analysis,
+    root_cause_analysis: row.root_cause_analysis,
     suggestedFix: row.suggested_fix,
+    suggested_fix: row.suggested_fix,
     reproductionSteps: row.reproduction_steps || [],
+    reproduction_steps: row.reproduction_steps || [],
     screenshotUrl: row.screenshot_url,
+    screenshot_url: row.screenshot_url,
     traceUrl: row.trace_url,
+    trace_url: row.trace_url,
     createdAt: row.created_at,
+    created_at: row.created_at,
     updatedAt: row.updated_at,
+    updated_at: row.updated_at,
   };
 }

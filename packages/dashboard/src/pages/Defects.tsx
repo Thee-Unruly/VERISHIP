@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bug, Plus, Trash2, Edit2, RefreshCw, Upload } from "lucide-react";
+import { Bug, Plus, Trash2, Edit2, RefreshCw, Upload, CheckSquare, Layers, AlertTriangle, ExternalLink, Image as ImageIcon } from "lucide-react";
 import { CreateDefectModal } from "@/components/modals/CreateDefectModal";
 import { EditDefectModal } from "@/components/modals/EditDefectModal";
 import { useCrud } from "@/hooks/use-crud";
@@ -323,27 +323,48 @@ export default function Defects() {
         ) : (
           <div className="grid gap-4">
             {filteredDefects.map((defect) => (
-              <Card key={defect.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <Bug className="h-5 w-5" />
-                        {defect.title}
-                      </CardTitle>
-                      <p className="mt-2 text-sm text-muted-foreground">
+              <Card key={defect.id} className="border hover:shadow-sm transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          <Bug className="h-4 w-4 text-destructive shrink-0" />
+                          {defect.title}
+                        </CardTitle>
+                        <Badge variant={getSeverityColor(defect.severity)}>
+                          {defect.severity}
+                        </Badge>
+                        <Badge variant="outline" className="capitalize">{defect.status}</Badge>
+                      </div>
+
+                      <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
                         {defect.description}
                       </p>
+
+                      {/* Linked Context: Test Case & Requirement */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {(defect.test_case_title || defect.testCaseTitle) && (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs flex items-center gap-1 font-medium">
+                            <CheckSquare className="h-3 w-3" />
+                            Test Case: {defect.test_case_title || defect.testCaseTitle}
+                          </Badge>
+                        )}
+                        {(defect.requirement_title || defect.requirementTitle) && (
+                          <Badge variant="outline" className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-300 text-xs flex items-center gap-1 font-medium">
+                            <Layers className="h-3 w-3" />
+                            Requirement: {defect.requirement_title || defect.requirementTitle}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Badge variant={getSeverityColor(defect.severity)}>
-                        {defect.severity}
-                      </Badge>
-                      <Badge variant="outline">{defect.status}</Badge>
+
+                    <div className="flex items-center gap-1 shrink-0">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEdit(defect)}
+                        title="Edit defect"
                       >
                         <Edit2 className="h-4 w-4 text-blue-500" />
                       </Button>
@@ -351,33 +372,74 @@ export default function Defects() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDelete(defect.id)}
+                        title="Delete defect"
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">ID</p>
-                      <p className="font-semibold">{defect.defect_id}</p>
+
+                <CardContent className="space-y-3 pt-0">
+                  {/* Root Cause Analysis & Suggested Fix */}
+                  {(defect.root_cause_analysis || defect.rootCauseAnalysis || defect.suggested_fix || defect.suggestedFix) && (
+                    <div className="p-3 rounded-lg bg-muted/40 border text-xs space-y-1.5">
+                      {(defect.root_cause_analysis || defect.rootCauseAnalysis) && (
+                        <div>
+                          <span className="font-semibold text-foreground flex items-center gap-1 mb-0.5">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                            Failure Reason & Root Cause:
+                          </span>
+                          <p className="text-muted-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed pl-4">
+                            {defect.root_cause_analysis || defect.rootCauseAnalysis}
+                          </p>
+                        </div>
+                      )}
+                      {(defect.suggested_fix || defect.suggestedFix) && (
+                        <div className="pt-1 border-t border-border/50">
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                            Suggested Fix:{" "}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {defect.suggested_fix || defect.suggestedFix}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-muted-foreground">Risk Score</p>
-                      <p className="font-semibold">
-                        {defect.release_risk_score?.toFixed(1) || 0}
-                      </p>
+                  )}
+
+                  {/* Metadata Bar & Artifacts */}
+                  <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground border-t">
+                    <div className="flex items-center gap-4">
+                      <span>ID: <strong className="font-mono text-foreground">{defect.defect_id || defect.id}</strong></span>
+                      {defect.created_at && (
+                        <span>Logged: <strong>{new Date(defect.created_at || defect.createdAt).toLocaleString()}</strong></span>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-muted-foreground">Found By</p>
-                      <p className="font-semibold">{defect.found_by || "Unknown"}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Recurrence Risk</p>
-                      <p className="font-semibold">
-                        {defect.likely_to_recur ? "High" : "Low"}
-                      </p>
+
+                    <div className="flex items-center gap-2">
+                      {(defect.screenshot_url || defect.screenshotUrl) && (
+                        <a
+                          href={defect.screenshot_url || defect.screenshotUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          Screenshot
+                        </a>
+                      )}
+                      {(defect.trace_url || defect.traceUrl) && (
+                        <a
+                          href={defect.trace_url || defect.traceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-purple-600 hover:underline"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Trace
+                        </a>
+                      )}
                     </div>
                   </div>
                 </CardContent>

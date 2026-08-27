@@ -380,50 +380,110 @@ AVAILABLE TOOLS:
         [finalStatus, taxonomy, failureReason || null, jobId]
       );
 
-      // Link to Test Case & Auto-create Defect if APP_DEFECT
+      // 5. Test Case & Defect Synchronization
+      let resolvedProjectId = projectId;
+      let testCaseTitle = '';
+      let requirementId: string | null = null;
+      let testPriority = 1;
+
       if (testCaseId) {
-        const tcStatus = finalStatus === 'completed' ? 'passed' : 'failed';
-        await pool.query(
-          `UPDATE test_cases SET status = $1, last_run_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
-          [tcStatus, runId, testCaseId]
-        );
+        try {
+          const tcRes = await pool.query(`SELECT * FROM test_cases WHERE id = $1`, [testCaseId]);
+          if (tcRes.rows.length > 0) {
+            const tc = tcRes.rows[0];
+            resolvedProjectId = resolvedProjectId || tc.project_id;
+            requirementId = tc.requirement_id || null;
+            testCaseTitle = tc.title || '';
+            testPriority = tc.priority || 1;
+          }
+
+          const tcStatus = (finalStatus === 'completed' || taxonomy === 'PASSED') ? 'pass' : 'fail';
+          await pool.query(
+            `UPDATE test_cases SET status = $1, last_run_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+            [tcStatus, runId, testCaseId]
+          );
+        } catch (tcErr) {
+          console.error('[Worker] Error updating test case status:', tcErr);
+        }
       }
 
-      if (taxonomy === 'APP_DEFECT' && projectId) {
-        const defectId = `def_${crypto.randomUUID().slice(0, 8)}`;
-        const defectTitle = `Autonomous Verification Failed: ${prompt.slice(0, 80)}`;
-        const rootCause = failureReason || 'Visual assertion or element interaction failed during agent test run.';
-        const suggestedFix = 'Verify element locator accessibility attributes and validate target server response times.';
+      // Auto-create Defect if test run failed (taxonomy !== 'PASSED' or finalStatus === 'failed')
+      if ((finalStatus === 'failed' || taxonomy !== 'PASSED') && resolvedProjectId) {
+        try {
+          const defectId = `def_${crypto.randomUUID().slice(0, 8)}`;
+          const defectTitle = testCaseTitle 
+            ? `[Automated QA Failure] ${testCaseTitle}` 
+            : `Autonomous Verification Failed: ${prompt.slice(0, 80)}`;
+          
+          const reasonText = failureReason || 'Visual assertion or element interaction failed during Playwright autonomous execution.';
+          const rootCause = `Taxonomy: ${taxonomy}.\n${reasonText}`;
+          const suggestedFix = `Review target page selectors on ${url}, check network responses, and ensure application DOM state satisfies test preconditions.`;
 
-        await pool.query(
-          `INSERT INTO defects (id, project_id, run_id, test_case_id, title, description, severity, status, root_cause_analysis, suggested_fix, trace_url)
-           VALUES ($1, $2, $3, $4, $5, $6, 'high', 'open', $7, $8, $9)`,
-          [
-            defectId,
-            projectId,
-            runId,
-            testCaseId || null,
-            defectTitle,
-            `Automated test failed at URL: ${url}. Failure Reason: ${failureReason}`,
-            rootCause,
-            suggestedFix,
-            traceUrl || null,
-          ]
-        );
-        console.log(`[Worker] Auto-logged defect ${defectId} for project ${projectId}.`);
+          // Grab the latest screenshot from step_logs if any
+          let lastScreenshot: string | null = null;
+          let stepsReproduction: any[] = [];
+          try {
+            const screenRes = await pool.query(
+              `SELECT screenshot_url FROM step_logs WHERE run_id = $1 AND screenshot_url IS NOT NULL ORDER BY step_number DESC LIMIT 1`,
+              [runId]
+            );
+            if (screenRes.rows.length > 0) {
+              lastScreenshot = screenRes.rows[0].screenshot_url;
+            }
+
+            const stepsRes = await pool.query(
+              `SELECT step_number as "step", action_taken as "action", tool_call_name as "tool", tool_result as "result"
+               FROM step_logs WHERE run_id = $1 ORDER BY step_number ASC`,
+              [runId]
+            );
+            stepsReproduction = stepsRes.rows;
+          } catch (logFetchErr) {}
+
+          let severity = 'HIGH';
+          if (testPriority >= 3) severity = 'CRITICAL';
+          else if (testPriority === 2) severity = 'HIGH';
+          else if (testPriority === 1) severity = 'MEDIUM';
+          else severity = 'LOW';
+
+          await pool.query(
+            `INSERT INTO defects (
+              id, project_id, run_id, test_case_id, title, description,
+              severity, status, root_cause_analysis, suggested_fix,
+              reproduction_steps, screenshot_url, trace_url
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10, $11, $12)`,
+            [
+              defectId,
+              resolvedProjectId,
+              runId,
+              testCaseId || null,
+              defectTitle,
+              `Autonomous Playwright test failed at URL: ${url}.\n\nFailure Details:\n${reasonText}\n\nExecution Prompt:\n${prompt}`,
+              severity,
+              rootCause,
+              suggestedFix,
+              JSON.stringify(stepsReproduction),
+              lastScreenshot,
+              traceUrl || null,
+            ]
+          );
+          console.log(`[Worker] Auto-logged defect ${defectId} (Severity: ${severity}) for project ${resolvedProjectId} linked to test case ${testCaseId}.`);
+        } catch (defectErr) {
+          console.error('[Worker] Error auto-logging defect:', defectErr);
+        }
       }
 
       // Update Project Health & Coverage
-      if (projectId) {
+      if (resolvedProjectId) {
         await pool.query(
           `UPDATE projects
            SET quality_coverage = (
-             SELECT COALESCE(ROUND((COUNT(CASE WHEN tc.status = 'passed' THEN 1 END)::numeric / NULLIF(COUNT(tc.id), 0)) * 100, 1), 0)
+             SELECT COALESCE(ROUND((COUNT(CASE WHEN tc.status = 'pass' THEN 1 END)::numeric / NULLIF(COUNT(tc.id), 0)) * 100, 1), 0)
              FROM test_cases tc WHERE tc.project_id = $1
            ),
            updated_at = CURRENT_TIMESTAMP
            WHERE id = $1`,
-          [projectId]
+          [resolvedProjectId]
         );
       }
 
