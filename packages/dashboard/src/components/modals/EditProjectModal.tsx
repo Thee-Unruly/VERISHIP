@@ -26,7 +26,8 @@ export function EditProjectModal({
         if (project && isOpen) {
             setName(project.name || "");
             setDescription(project.description || "");
-            setReleaseDate(project.target_release_date?.split("T")[0] || "");
+            const rDate = project.target_release_date || project.targetReleaseDate;
+            setReleaseDate(rDate ? rDate.split("T")[0] : "");
         }
     }, [project, isOpen]);
 
@@ -48,6 +49,10 @@ export function EditProjectModal({
 
         if (releaseDate) {
             data.target_release_date = new Date(releaseDate).toISOString();
+            data.targetReleaseDate = new Date(releaseDate).toISOString();
+        } else {
+            data.target_release_date = null;
+            data.targetReleaseDate = null;
         }
 
         await update(project.id, data);

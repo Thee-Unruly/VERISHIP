@@ -17,14 +17,14 @@ export default function Projects() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<any>(null);
-  const [expandedProject, setExpandedProject] = useState<number | null>(null);
-  const [teamMembers, setTeamMembers] = useState<{ [key: number]: any[] }>({});
+  const [expandedProject, setExpandedProject] = useState<string | number | null>(null);
+  const [teamMembers, setTeamMembers] = useState<{ [key: string]: any[] }>({});
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberRole, setNewMemberRole] = useState("");
-  const [addingMemberFor, setAddingMemberFor] = useState<number | null>(null);
+  const [addingMemberFor, setAddingMemberFor] = useState<string | number | null>(null);
   const [editingMember, setEditingMember] = useState<any>(null);
-  const fetchedProjectsRef = useRef<Set<number>>(new Set());
+  const fetchedProjectsRef = useRef<Set<string | number>>(new Set());
 
   const { delete: deleteProject } = useCrud({
     baseUrl: "/api/projects",
@@ -33,9 +33,9 @@ export default function Projects() {
     },
   });
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string | number) => {
     if (confirm("Are you sure you want to delete this project?")) {
-      await deleteProject(id);
+      await deleteProject(id as any);
     }
   };
 
@@ -44,7 +44,7 @@ export default function Projects() {
     setIsEditModalOpen(true);
   };
 
-  const fetchTeamMembers = async (projectId: number) => {
+  const fetchTeamMembers = async (projectId: string | number) => {
     const token = localStorage.getItem("authToken");
     try {
       const res = await fetch(`/api/projects/${projectId}/team`, {
@@ -54,14 +54,14 @@ export default function Projects() {
         throw new Error(`HTTP ${res.status}`);
       }
       const data = await res.json();
-      setTeamMembers(prev => ({ ...prev, [projectId]: data }));
+      setTeamMembers(prev => ({ ...prev, [String(projectId)]: data, [projectId]: data }));
     } catch (err) {
       console.error("Error fetching team members:", err);
-      setTeamMembers(prev => ({ ...prev, [projectId]: [] }));
+      setTeamMembers(prev => ({ ...prev, [String(projectId)]: [], [projectId]: [] }));
     }
   };
 
-  const handleAddTeamMember = async (projectId: number) => {
+  const handleAddTeamMember = async (projectId: string | number) => {
     if (!newMemberName.trim() || !newMemberRole.trim()) {
       alert("Name and role are required");
       return;
@@ -98,7 +98,7 @@ export default function Projects() {
     }
   };
 
-  const handleDeleteTeamMember = async (projectId: number, memberId: number) => {
+  const handleDeleteTeamMember = async (projectId: string | number, memberId: string | number) => {
     if (!confirm("Remove this team member?")) return;
 
     const token = localStorage.getItem("authToken");
@@ -116,7 +116,7 @@ export default function Projects() {
     }
   };
 
-  const handleUpdateTeamMember = async (projectId: number, memberId: number) => {
+  const handleUpdateTeamMember = async (projectId: string | number, memberId: string | number) => {
     if (!editingMember.name.trim() || !editingMember.role.trim()) {
       alert("Name and role are required");
       return;
@@ -146,12 +146,12 @@ export default function Projects() {
     }
   };
 
-  const toggleProjectExpansion = (projectId: number) => {
+  const toggleProjectExpansion = (projectId: string | number) => {
     if (expandedProject === projectId) {
       setExpandedProject(null);
     } else {
       setExpandedProject(projectId);
-      if (!teamMembers[projectId]) {
+      if (!teamMembers[projectId] && !teamMembers[String(projectId)]) {
         fetchTeamMembers(projectId);
       }
     }
@@ -224,7 +224,12 @@ export default function Projects() {
           </Card>
         ) : (
           <div className="grid gap-4">
-            {filteredProjects.map((project: any) => (
+            {filteredProjects.map((project: any) => {
+              const createdDate = project.created_at || project.createdAt;
+              const releaseDate = project.target_release_date || project.targetReleaseDate;
+              const membersCount = teamMembers[project.id]?.length || teamMembers[String(project.id)]?.length || 0;
+
+              return (
               <Card key={project.id}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -266,15 +271,13 @@ export default function Projects() {
                     <div>
                       <p className="text-muted-foreground">Created</p>
                       <p className="font-semibold">
-                        {new Date(project.created_at).toLocaleDateString()}
+                        {createdDate ? new Date(createdDate).toLocaleDateString() : "Recently"}
                       </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Release Date</p>
                       <p className="font-semibold">
-                        {project.target_release_date
-                          ? new Date(project.target_release_date).toLocaleDateString()
-                          : "Not set"}
+                        {releaseDate ? new Date(releaseDate).toLocaleDateString() : "Not set"}
                       </p>
                     </div>
                     <div>
@@ -292,7 +295,7 @@ export default function Projects() {
                       className="w-full justify-start"
                     >
                       <Users className="h-4 w-4 mr-2" />
-                      Team Members ({teamMembers[project.id]?.length || 0})
+                      Team Members ({membersCount})
                     </Button>
 
                     {expandedProject === project.id && (
@@ -438,7 +441,8 @@ export default function Projects() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

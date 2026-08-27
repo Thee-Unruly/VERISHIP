@@ -63,20 +63,21 @@ export function CreateProjectModal({
     const handleSubmit = async () => {
         if (!name.trim()) return;
 
-        const data: ProjectData = {
+        const data: any = {
             name,
             description,
         };
 
         if (releaseDate) {
             data.target_release_date = new Date(releaseDate).toISOString();
+            data.targetReleaseDate = new Date(releaseDate).toISOString();
         }
 
         const result = await create(data as any);
 
         // If project created successfully and we have team members, add them
         if (result && result.id && teamMembers.length > 0) {
-            const validMembers = teamMembers.filter(m => m.name.trim() && m.email.trim());
+            const validMembers = teamMembers.filter(m => m.name && m.name.trim());
             const token = localStorage.getItem("authToken");
 
             for (const member of validMembers) {
@@ -85,19 +86,21 @@ export function CreateProjectModal({
                         method: "POST",
                         headers: { 
                             "Content-Type": "application/json",
-                            "Authorization": `Bearer ${token}`
+                            ...(token ? { "Authorization": `Bearer ${token}` } : {})
                         },
-                        body: JSON.stringify(member),
+                        body: JSON.stringify({
+                            name: member.name.trim(),
+                            email: member.email?.trim() || undefined,
+                            role: member.role?.trim() || "Developer",
+                        }),
                     });
 
                     if (!response.ok) {
-                        const errorData = await response.json();
+                        const errorData = await response.json().catch(() => ({}));
                         console.error("Failed to add team member:", errorData);
-                        toast.error(`Failed to add team member: ${errorData.detail || 'Unknown error'}`);
                     }
                 } catch (error) {
                     console.error("Failed to add team member:", error);
-                    toast.error("Failed to add team member");
                 }
             }
         }

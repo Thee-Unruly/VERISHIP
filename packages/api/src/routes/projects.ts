@@ -43,14 +43,15 @@ export async function projectRoutes(fastify: FastifyInstance) {
 
   // Create project
   fastify.post('/api/projects', async (request, reply) => {
-    const body = request.body as CreateProjectInput;
-    if (!body.name) {
+    const body = request.body as any;
+    if (!body?.name) {
       return reply.status(400).send({ error: 'Project name is required' });
     }
 
     const id = `prj_${crypto.randomUUID().slice(0, 8)}`;
-    const workspaceId = body.workspaceId || 'default';
+    const workspaceId = body.workspaceId || body.workspace_id || 'default';
     const status = body.status || 'on-track';
+    const targetReleaseDate = body.targetReleaseDate || body.target_release_date || null;
 
     const client = await pool.connect();
     try {
@@ -58,7 +59,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
         `INSERT INTO projects (id, workspace_id, name, description, status, target_release_date)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [id, workspaceId, body.name, body.description || null, status, body.targetReleaseDate || null]
+        [id, workspaceId, body.name, body.description || null, status, targetReleaseDate]
       );
       return reply.status(201).send(mapProjectRow(res.rows[0]));
     } finally {
@@ -69,7 +70,8 @@ export async function projectRoutes(fastify: FastifyInstance) {
   // Update project
   fastify.put('/api/projects/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as Partial<CreateProjectInput>;
+    const body = request.body as any;
+    const targetReleaseDate = body.targetReleaseDate !== undefined ? body.targetReleaseDate : body.target_release_date;
 
     const client = await pool.connect();
     try {
@@ -82,7 +84,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $5
          RETURNING *`,
-        [body.name, body.description, body.status, body.targetReleaseDate, id]
+        [body.name, body.description, body.status, targetReleaseDate, id]
       );
       if (res.rows.length === 0) {
         return reply.status(404).send({ error: 'Project not found' });
@@ -99,7 +101,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
     const client = await pool.connect();
     try {
       await client.query(`DELETE FROM projects WHERE id = $1`, [id]);
-      return reply.send({ success: true, message: `Project ${id} deleted` });
+      return reply.send({ success: true, message: 'Project deleted' });
     } finally {
       client.release();
     }
@@ -146,7 +148,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Project Team Members
+  // Team members for a project
   fastify.get('/api/projects/:id/team', async (request, reply) => {
     const { id } = request.params as { id: string };
     const client = await pool.connect();
@@ -175,9 +177,32 @@ export async function projectRoutes(fastify: FastifyInstance) {
     const client = await pool.connect();
     try {
       let userId = body.userId;
-      if (!userId) {
-        const uRes = await client.query(`SELECT id FROM users LIMIT 1`);
-        userId = uRes.rows[0]?.id || 'usr_admin';
+      if (!userId && (body.email || body.name)) {
+        const email = body.email || `${(body.name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '.')}.${Date.now()}@example.com`;
+        const existing = await client.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [email]);
+        if (existing.rows.length > 0) {
+          userId = existing.rows[0].id;
+        } else {
+          userId = `usr_${crypto.randomUUID().slice(0, 8)}`;
+          const nameParts = (body.name || 'Team Member').trim().split(' ');
+          const firstName = nameParts[0] || 'Team';
+          const lastName = nameParts.slice(1).join(' ') || 'Member';
+          const username = (body.email ? body.email.split('@')[0] : firstName.toLowerCase()) + '_' + Math.floor(Math.random() * 1000);
+          await client.query(
+            `INSERT INTO users (id, username, email, password_hash, first_name, last_name, role)
+             VALUES ($1, $2, $3, 'hash_placeholder', $4, $5, $6)
+             ON CONFLICT (id) DO NOTHING`,
+            [userId, username, email, firstName, lastName, body.role || 'Developer']
+          );
+        }
+      } else if (!userId) {
+        userId = `usr_${crypto.randomUUID().slice(0, 8)}`;
+        await client.query(
+          `INSERT INTO users (id, username, email, password_hash, first_name, last_name, role)
+           VALUES ($1, $2, $3, 'hash_placeholder', 'Team', 'Member', 'Developer')
+           ON CONFLICT DO NOTHING`,
+          [userId, `user_${userId}`, `${userId}@example.com`]
+        );
       }
 
       await client.query(
@@ -212,17 +237,27 @@ function mapProjectRow(row: any) {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
+    workspace_id: row.workspace_id,
     name: row.name,
     description: row.description,
     status: row.status,
     healthScore: row.health_score ? parseFloat(row.health_score) : 100,
+    health_score: row.health_score ? parseFloat(row.health_score) : 100,
     qualityCoverage: row.quality_coverage ? parseFloat(row.quality_coverage) : 0,
+    quality_coverage: row.quality_coverage ? parseFloat(row.quality_coverage) : 0,
     targetReleaseDate: row.target_release_date,
-    requirementCount: row.requirement_count,
-    testCaseCount: row.test_case_count,
-    openDefectsCount: row.open_defects_count,
-    totalRunsCount: row.total_runs_count,
+    target_release_date: row.target_release_date,
+    requirementCount: row.requirement_count || 0,
+    requirement_count: row.requirement_count || 0,
+    testCaseCount: row.test_case_count || 0,
+    test_case_count: row.test_case_count || 0,
+    openDefectsCount: row.open_defects_count || 0,
+    open_defects_count: row.open_defects_count || 0,
+    totalRunsCount: row.total_runs_count || 0,
+    total_runs_count: row.total_runs_count || 0,
     createdAt: row.created_at,
+    created_at: row.created_at,
     updatedAt: row.updated_at,
+    updated_at: row.updated_at,
   };
 }
