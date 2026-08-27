@@ -345,9 +345,9 @@ export default function PlaywrightPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4">
+      <div className="flex flex-col min-h-[calc(100vh-120px)] space-y-4">
         {/* Top Slim Studio Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="text-2xl">🎭</span>
             <div>
@@ -388,16 +388,16 @@ export default function PlaywrightPage() {
           </div>
         </div>
 
-        {/* 2-Column Split Studio Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* 2-Column Split Studio Layout (Full Height) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-stretch">
           
           {/* ========================================================================= */}
           {/* LEFT PANEL (35% - 4.5 cols): Launcher + Compact Preset Chips + History    */}
           {/* ========================================================================= */}
-          <div className="lg:col-span-4 xl:col-span-4 space-y-4 flex flex-col">
+          <div className="lg:col-span-4 xl:col-span-4 flex flex-col gap-4 h-full">
             
             {/* Quick Test Launcher Card */}
-            <Card className="border shadow-sm bg-card">
+            <Card className="border shadow-sm bg-card shrink-0">
               <CardHeader className="pb-3 pt-4 px-4">
                 <CardTitle className="text-sm font-bold flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
@@ -465,7 +465,7 @@ export default function PlaywrightPage() {
                         }
                         className="px-2 py-0.5 rounded text-[11px] bg-secondary/80 hover:bg-secondary border border-border text-foreground font-medium transition-colors"
                       >
-                        📝 TodoMVC CRUD
+                        📝 TodoMVC
                       </button>
                       <button
                         type="button"
@@ -477,7 +477,7 @@ export default function PlaywrightPage() {
                         }
                         className="px-2 py-0.5 rounded text-[11px] bg-secondary/80 hover:bg-secondary border border-border text-foreground font-medium transition-colors"
                       >
-                        🔄 Approval Flow
+                        🔄 Approval
                       </button>
                       <button
                         type="button"
@@ -489,7 +489,7 @@ export default function PlaywrightPage() {
                         }
                         className="px-2 py-0.5 rounded text-[11px] bg-secondary/80 hover:bg-secondary border border-border text-foreground font-medium transition-colors"
                       >
-                        🛡️ Smoke Verification
+                        🛡️ Smoke
                       </button>
                     </div>
                   </div>
@@ -559,9 +559,9 @@ export default function PlaywrightPage() {
               </CardContent>
             </Card>
 
-            {/* Run History List Card */}
-            <Card className="border shadow-sm bg-card flex flex-col flex-1">
-              <CardHeader className="pb-2 pt-3 px-4 border-b">
+            {/* Run History List Card (Full remaining height) */}
+            <Card className="border shadow-sm bg-card flex flex-col flex-1 min-h-[380px]">
+              <CardHeader className="pb-2 pt-3 px-4 border-b shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -583,7 +583,7 @@ export default function PlaywrightPage() {
                 </div>
               </CardHeader>
 
-              <CardContent className="p-2 max-h-[360px] overflow-y-auto space-y-1">
+              <CardContent className="p-2 flex-1 overflow-y-auto space-y-1.5 min-h-0">
                 {filteredJobs.length === 0 ? (
                   <div className="p-6 text-center text-xs text-muted-foreground">
                     No matching runs found.
@@ -656,12 +656,12 @@ export default function PlaywrightPage() {
           {/* ========================================================================= */}
           {/* RIGHT PANEL (65% - 7.5 cols): Live Studio Inspector Viewport              */}
           {/* ========================================================================= */}
-          <div className="lg:col-span-8 xl:col-span-8 space-y-4">
+          <div className="lg:col-span-8 xl:col-span-8 flex flex-col h-full">
             
             {activeJobId ? (
-              <Card className="border shadow-sm bg-card overflow-hidden">
+              <Card className="border shadow-sm bg-card overflow-hidden flex flex-col flex-1 h-full">
                 {/* Active Run Header Bar */}
-                <div className="p-4 border-b bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="p-4 border-b bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs font-bold text-foreground bg-background px-2 py-0.5 rounded border">
@@ -735,8 +735,8 @@ export default function PlaywrightPage() {
                 </div>
 
                 {/* Viewport Tabs */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                  <div className="px-4 border-b bg-background">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col min-h-0">
+                  <div className="px-4 border-b bg-background shrink-0">
                     <TabsList className="bg-transparent h-10 p-0 gap-4">
                       <TabsTrigger
                         value="live"
@@ -772,12 +772,12 @@ export default function PlaywrightPage() {
                     </TabsList>
                   </div>
 
-                  <CardContent className="p-4 min-h-[460px] max-h-[580px] overflow-y-auto">
+                  <CardContent className="p-4 flex-1 overflow-y-auto min-h-0">
                     
                     {/* TAB 1: Live Steps & Timeline */}
-                    <TabsContent value="live" className="m-0 space-y-2.5">
+                    <TabsContent value="live" className="m-0 space-y-2.5 h-full">
                       {steps.length === 0 ? (
-                        <div className="py-20 text-center text-muted-foreground space-y-2">
+                        <div className="py-24 text-center text-muted-foreground space-y-2">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
                           <p className="text-xs font-medium">
                             {isJobRunning
@@ -833,18 +833,18 @@ export default function PlaywrightPage() {
                     </TabsContent>
 
                     {/* TAB 2: Session Video Player */}
-                    <TabsContent value="video" className="m-0">
+                    <TabsContent value="video" className="m-0 h-full">
                       {activeRun?.video_url ? (
-                        <div className="rounded-lg overflow-hidden border bg-black shadow-inner">
+                        <div className="rounded-lg overflow-hidden border bg-black shadow-inner h-full flex items-center justify-center">
                           <video
                             src={activeRun.video_url}
                             controls
                             autoPlay
-                            className="w-full max-h-[460px] mx-auto"
+                            className="w-full max-h-[520px] mx-auto"
                           />
                         </div>
                       ) : (
-                        <div className="py-24 text-center border border-dashed rounded-lg text-muted-foreground space-y-2">
+                        <div className="py-32 text-center border border-dashed rounded-lg text-muted-foreground space-y-2">
                           <Film className="w-8 h-8 mx-auto text-muted-foreground/60" />
                           <p className="text-xs font-medium">
                             {isJobRunning
@@ -856,9 +856,9 @@ export default function PlaywrightPage() {
                     </TabsContent>
 
                     {/* TAB 3: Generated Playwright Spec Code */}
-                    <TabsContent value="spec" className="m-0">
-                      <div className="relative">
-                        <pre className="p-4 rounded-lg bg-slate-950 text-slate-100 font-mono text-xs leading-relaxed overflow-x-auto max-h-[460px] border">
+                    <TabsContent value="spec" className="m-0 h-full">
+                      <div className="relative h-full">
+                        <pre className="p-4 rounded-lg bg-slate-950 text-slate-100 font-mono text-xs leading-relaxed overflow-x-auto h-full max-h-[520px] border">
                           {specCode ||
                             `// Playwright Spec Generated by VeriShip Autonomous Engine\nimport { test, expect } from '@playwright/test';\n\ntest('Autonomous QA Journey', async ({ page }) => {\n  await page.goto('${activeJob?.url || url}');\n  // Steps compiling...\n});`}
                         </pre>
@@ -866,7 +866,7 @@ export default function PlaywrightPage() {
                     </TabsContent>
 
                     {/* TAB 4: Assertions & Run Memory */}
-                    <TabsContent value="memory" className="m-0 space-y-4">
+                    <TabsContent value="memory" className="m-0 space-y-4 h-full">
                       {memoryData ? (
                         <div className="space-y-4 text-xs">
                           {/* Passed Assertions */}
@@ -917,7 +917,7 @@ export default function PlaywrightPage() {
                           )}
                         </div>
                       ) : (
-                        <div className="py-20 text-center text-muted-foreground text-xs">
+                        <div className="py-24 text-center text-muted-foreground text-xs">
                           {isJobRunning ? "Analyzing DOM state and assertions..." : "No structured memory records found."}
                         </div>
                       )}
@@ -928,7 +928,7 @@ export default function PlaywrightPage() {
               </Card>
             ) : (
               /* Sleek Empty State when no run is selected */
-              <Card className="border border-dashed shadow-sm bg-card/60 p-12 text-center flex flex-col items-center justify-center min-h-[520px]">
+              <Card className="border border-dashed shadow-sm bg-card/60 p-12 text-center flex flex-col items-center justify-center flex-1 h-full">
                 <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4">
                   <Play className="w-6 h-6 fill-primary" />
                 </div>
