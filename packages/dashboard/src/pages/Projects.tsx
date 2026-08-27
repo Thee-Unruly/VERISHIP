@@ -223,17 +223,17 @@ export default function Projects() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start">
             {filteredProjects.map((project: any) => {
               const createdDate = project.created_at || project.createdAt;
               const releaseDate = project.target_release_date || project.targetReleaseDate;
               const membersCount = teamMembers[project.id]?.length || teamMembers[String(project.id)]?.length || 0;
 
               return (
-              <Card key={project.id}>
+              <Card key={project.id} className="border shadow-sm hover:shadow transition-shadow flex flex-col">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle>{project.name}</CardTitle>
+                    <CardTitle className="text-base font-bold truncate pr-2">{project.name}</CardTitle>
                     <div className="flex gap-2">
                       <Badge
                         variant={
