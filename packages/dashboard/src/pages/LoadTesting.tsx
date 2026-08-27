@@ -24,13 +24,13 @@ import {
 import { toast } from "sonner";
 
 interface Project {
-    id: number;
+    id: string | number;
     name: string;
 }
 
 interface LoadTestJob {
     id: string;
-    project_id: number | null;
+    project_id: string | number | null;
     project_name: string | null;
     base_url: string;
     users: number;
@@ -45,7 +45,7 @@ interface LoadTestJob {
 export default function LoadTesting() {
     const [projects, setProjects] = useState<Project[]>([]);
     const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-    const [baseUrl, setBaseUrl] = useState("http://localhost:8000");
+    const [baseUrl, setBaseUrl] = useState("http://localhost:3000");
     const [users, setUsers] = useState(100);
     const [spawnRate, setSpawnRate] = useState(10);
     const [runTime, setRunTime] = useState("1m");
@@ -66,13 +66,13 @@ export default function LoadTesting() {
 
     const fetchProjects = async () => {
         try {
-            const response = await fetch("/api/projects/", {
+            const response = await fetch("/api/projects", {
                 headers: {
                     "Authorization": `Bearer ${localStorage.getItem("authToken")}`
                 }
             });
             const data = await response.json();
-            setProjects(data);
+            setProjects(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error("Failed to fetch projects:", error);
         }
@@ -111,7 +111,7 @@ export default function LoadTesting() {
                     "Authorization": `Bearer ${localStorage.getItem("authToken")}`
                 },
                 body: JSON.stringify({
-                    project_id: selectedProjectId ? parseInt(selectedProjectId) : null,
+                    project_id: selectedProjectId || null,
                     base_url: baseUrl,
                     users,
                     spawn_rate: spawnRate,

@@ -260,6 +260,23 @@ export async function initDb(maxRetries = 10, retryDelayMs = 2000) {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
+      -- Load & Performance Testing Jobs
+      CREATE TABLE IF NOT EXISTS load_test_jobs (
+        id VARCHAR(64) PRIMARY KEY,
+        project_id VARCHAR(64) REFERENCES projects(id) ON DELETE SET NULL,
+        base_url TEXT NOT NULL,
+        users INT NOT NULL DEFAULT 100,
+        spawn_rate INT NOT NULL DEFAULT 10,
+        run_time VARCHAR(20) NOT NULL DEFAULT '1m',
+        endpoints JSONB DEFAULT '[]'::jsonb,
+        status VARCHAR(20) NOT NULL DEFAULT 'running',
+        logs JSONB DEFAULT '[]'::jsonb,
+        summary JSONB DEFAULT '{}'::jsonb,
+        report_path TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS run_memories (
         id VARCHAR(64) PRIMARY KEY,
         run_id VARCHAR(64) REFERENCES runs(id) ON DELETE CASCADE,

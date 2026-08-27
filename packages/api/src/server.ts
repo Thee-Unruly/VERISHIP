@@ -14,6 +14,7 @@ import { defectRoutes } from './routes/defects';
 import { releaseRoutes } from './routes/releases';
 import { copilotRoutes } from './routes/copilot';
 import { serviceAccountRoutes } from './routes/serviceAccounts';
+import { loadTestingRoutes } from './routes/loadTesting';
 
 dotenv.config();
 
@@ -58,6 +59,7 @@ async function start() {
     await fastify.register(serviceAccountRoutes);
     await fastify.register(jobRoutes);
     await fastify.register(templateRoutes);
+    await fastify.register(loadTestingRoutes);
 
     fastify.get('/health', async () => {
       return {
