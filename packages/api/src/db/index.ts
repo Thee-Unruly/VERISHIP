@@ -11,10 +11,23 @@ export const pool = new Pool({
   idleTimeoutMillis: 30000,
 });
 
-export async function initDb() {
-  const client = await pool.connect();
-  try {
-    await client.query(`
+pool.on('error', (err) => {
+  console.error('[DB Pool Error] Unexpected error on idle PostgreSQL client:', err.message);
+});
+
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function initDb(maxRetries = 10, retryDelayMs = 2000) {
+  let attempt = 0;
+  while (attempt < maxRetries) {
+    attempt++;
+    let client;
+    try {
+      console.log(`[DB] Connecting to PostgreSQL (attempt ${attempt}/${maxRetries})...`);
+      client = await pool.connect();
+      await client.query(`
       -- Users & Authentication
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(64) PRIMARY KEY,
@@ -265,8 +278,18 @@ export async function initDb() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('[DB] Unified VeriShip Quality Governance database schema initialized.');
-  } finally {
-    client.release();
+      console.log('[DB] Unified VeriShip Quality Governance database schema initialized.');
+      return;
+    } catch (err: any) {
+      console.warn(`[DB] Connection attempt ${attempt}/${maxRetries} failed: ${err?.message || err}`);
+      if (attempt >= maxRetries) {
+        throw new Error(`[DB] Could not establish connection to PostgreSQL after ${maxRetries} attempts: ${err?.message || err}`);
+      }
+      await sleep(retryDelayMs);
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
   }
 }

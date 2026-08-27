@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: qa_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: qadevel
       POSTGRES_PASSWORD: qapassword123
@@ -19,6 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: qa_redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -32,6 +34,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: qa_minio
+    restart: unless-stopped
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -59,6 +62,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     container_name: qa_api
+    restart: unless-stopped
     ports:
       - "4000:4000"
     environment:
@@ -69,9 +73,16 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       - artifacts_data:/app/artifacts
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +94,7 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     container_name: qa_worker
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://qadevel:qapassword123@postgres:5432/qa_platform_v2
       - REDIS_HOST=redis
@@ -92,9 +104,12 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - HEADLESS=true
+      - HEADLESS=${HEADLESS:-true}
+      - MAX_STEPS=${MAX_STEPS:-15}
+      - MAX_FULL_SNAPSHOTS=${MAX_FULL_SNAPSHOTS:-3}
     volumes:
       - artifacts_data:/app/artifacts
     depends_on:
@@ -110,10 +125,12 @@ services:
       context: .
       dockerfile: Dockerfile.dashboard
     container_name: qa_dashboard
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       - PORT=3000
+      - VITE_API_PROXY_TARGET=http://api:4000
     depends_on:
       - api
 

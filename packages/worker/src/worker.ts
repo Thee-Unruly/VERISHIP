@@ -23,10 +23,23 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://qadevel:qapassword123@localhost:5432/qa_platform_v2',
 });
 
+pool.on('error', (err) => {
+  console.error('[Worker DB Pool Error] Unexpected error on idle client:', err.message);
+});
+
 // Initialize Redis pub/sub client for real-time dashboard events
 const pubRedis = new Redis({
   host: connection.host,
   port: connection.port,
+  maxRetriesPerRequest: null,
+  retryStrategy(times) {
+    const delay = Math.min(times * 500, 3000);
+    return delay;
+  },
+});
+
+pubRedis.on('error', (err) => {
+  console.error('[Worker PubRedis Error]:', err.message);
 });
 
 const llmAdapter = createLLMAdapter();
