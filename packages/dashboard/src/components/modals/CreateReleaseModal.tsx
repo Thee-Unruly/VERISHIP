@@ -9,7 +9,7 @@ import { AlertCircle } from "lucide-react";
 interface CreateReleaseModalProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    projectId: number | "";
+    projectId: string | number | "";
     onSuccess: () => void;
 }
 

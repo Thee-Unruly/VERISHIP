@@ -18,11 +18,11 @@ export default function TestCases() {
   const [testCases, setTestCases] = useState([]);
   const [filteredTestCases, setFilteredTestCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [requirementsMap, setRequirementsMap] = useState<Record<number, string>>({});
-  const [requirementTitleMap, setRequirementTitleMap] = useState<Record<string, number>>({});
+  const [requirementsMap, setRequirementsMap] = useState<Record<string, string>>({});
+  const [requirementTitleMap, setRequirementTitleMap] = useState<Record<string, string>>({});
   const [currentTab, setCurrentTab] = useState<"ongoing" | "retest" | "pass" | "fail">("ongoing");
   const { projects, loading: projectsLoading, refresh, selectedProjectId, setSelectedProjectId } = useProjects();
-  const selectedProject = selectedProjectId && selectedProjectId !== "all" ? Number(selectedProjectId) : (projects[0]?.id || "");
+  const selectedProject = selectedProjectId && selectedProjectId !== "all" ? selectedProjectId : (projects[0]?.id || "");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedTestCase, setSelectedTestCase] = useState<any>(null);
@@ -74,11 +74,11 @@ export default function TestCases() {
         headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await res.json();
-      const map: Record<number, string> = {};
-      const titleMap: Record<string, number> = {};
+      const map: Record<string, string> = {};
+      const titleMap: Record<string, string> = {};
       (data || []).forEach((r: any) => {
-        map[r.id] = r.title;
-        if (r.title) titleMap[String(r.title).toLowerCase().trim()] = r.id;
+        map[String(r.id)] = r.title;
+        if (r.title) titleMap[String(r.title).toLowerCase().trim()] = String(r.id);
       });
       setRequirementsMap(map);
       setRequirementTitleMap(titleMap);
@@ -289,15 +289,15 @@ export default function TestCases() {
 
   // Group test cases by requirement_id
   const grouped = (filteredTestCases || []).reduce((acc: any, tc: any) => {
-    const rid = tc.requirement_id || 0;
+    const rid = tc.requirement_id || "none";
     if (!acc[rid]) acc[rid] = [];
     acc[rid].push(tc);
     return acc;
   }, {} as Record<string, any[]>);
 
   const groups = Object.keys(grouped).map((k) => ({
-    requirementId: Number(k),
-    title: Number(k) === 0 ? "(No Requirement)" : (requirementsMap[Number(k)] || `Requirement ${k}`),
+    requirementId: k,
+    title: k === "none" || k === "0" ? "(No Requirement)" : (requirementsMap[k] || `Requirement ${k}`),
     testCases: grouped[k],
   }));
 
@@ -344,8 +344,8 @@ export default function TestCases() {
         <div className="mb-4">
           <label className="text-sm font-medium">Filter by Project:</label>
           <select
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(Number(e.target.value))}
+            value={selectedProjectId || selectedProject}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
             className="mt-2 rounded border border-input bg-background px-3 py-2"
           >
             {!Array.isArray(projects) || projects.length === 0 ? (

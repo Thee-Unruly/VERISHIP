@@ -15,7 +15,7 @@ import { useCrud } from "@/hooks/use-crud";
 interface CreateTestCaseModalProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    projectId: number | "";
+    projectId: string | number | "";
     onSuccess: () => void;
 }
 

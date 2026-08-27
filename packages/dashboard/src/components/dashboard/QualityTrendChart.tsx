@@ -71,7 +71,7 @@ export function QualityTrendChart() {
         <div>
           <select
             value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value ? Number(e.target.value) : "")}
+            onChange={(e) => setSelectedProject(e.target.value || "")}
             className="rounded border border-input bg-background px-2 py-1 text-sm"
           >
             <option value="">All Projects</option>

@@ -14,8 +14,8 @@ export default function Releases() {
   const [releases, setReleases] = useState([]);
   const [filteredReleases, setFilteredReleases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { projects, loading: projectsLoading, refresh } = useProjects();
-  const [selectedProject, setSelectedProject] = useState<number | "">("");
+  const { projects, loading: projectsLoading, refresh, selectedProjectId, setSelectedProjectId } = useProjects();
+  const selectedProject = selectedProjectId && selectedProjectId !== "all" ? selectedProjectId : (projects[0]?.id || "");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isReadinessModalOpen, setIsReadinessModalOpen] = useState(false);
@@ -160,8 +160,8 @@ export default function Releases() {
         <div className="mb-4">
           <label className="text-sm font-medium">Filter by Project:</label>
           <select
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(Number(e.target.value))}
+            value={selectedProjectId || selectedProject}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
             className="mt-2 rounded border border-input bg-background px-3 py-2"
           >
             {projects.length === 0 ? (
