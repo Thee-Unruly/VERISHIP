@@ -184,9 +184,9 @@ export async function projectRoutes(fastify: FastifyInstance) {
           userId = existing.rows[0].id;
         } else {
           userId = `usr_${crypto.randomUUID().slice(0, 8)}`;
-          const nameParts = (body.name || 'Team Member').trim().split(' ');
-          const firstName = nameParts[0] || 'Team';
-          const lastName = nameParts.slice(1).join(' ') || 'Member';
+          const nameParts = (body.name || '').trim().split(/\s+/);
+          const firstName = nameParts[0] || 'Member';
+          const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
           const username = (body.email ? body.email.split('@')[0] : firstName.toLowerCase()) + '_' + Math.floor(Math.random() * 1000);
           await client.query(
             `INSERT INTO users (id, username, email, password_hash, first_name, last_name, role)
@@ -199,7 +199,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
         userId = `usr_${crypto.randomUUID().slice(0, 8)}`;
         await client.query(
           `INSERT INTO users (id, username, email, password_hash, first_name, last_name, role)
-           VALUES ($1, $2, $3, 'hash_placeholder', 'Team', 'Member', 'Developer')
+           VALUES ($1, $2, $3, 'hash_placeholder', 'Member', '', 'Developer')
            ON CONFLICT DO NOTHING`,
           [userId, `user_${userId}`, `${userId}@example.com`]
         );
@@ -223,15 +223,15 @@ export async function projectRoutes(fastify: FastifyInstance) {
     const body = request.body as { name?: string; email?: string; role?: string };
     const client = await pool.connect();
     try {
-      if (body.name || body.email) {
-        const nameParts = (body.name || '').trim().split(' ');
-        const firstName = nameParts[0] || null;
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+      if (body.name !== undefined || body.email !== undefined) {
+        const nameParts = (body.name || '').trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
         await client.query(
           `UPDATE users
-           SET first_name = COALESCE($1, first_name),
-               last_name = COALESCE($2, last_name),
+           SET first_name = CASE WHEN $1 <> '' THEN $1 ELSE first_name END,
+               last_name = $2,
                email = COALESCE($3, email)
            WHERE id = $4`,
           [firstName, lastName, body.email || null, memberId]
