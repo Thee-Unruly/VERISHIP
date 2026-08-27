@@ -120,6 +120,79 @@ export async function jobRoutes(fastify: FastifyInstance) {
   fastify.post('/api/jobs', handleCreateJob);
   fastify.post('/api/v1/jobs', handleCreateJob);
 
+  // Playwright Test Case Runner Endpoint
+  fastify.post('/api/test-runs/run-test-case', async (req: any, reply) => {
+    const { test_case_id, testCaseId, target_base_url, targetUrl, browser } = req.body || {};
+    const tcId = test_case_id || testCaseId;
+    
+    let url = target_base_url || targetUrl;
+    let prompt = '';
+    let projectId = null;
+
+    if (tcId) {
+      const tcRes = await pool.query(`SELECT * FROM test_cases WHERE id = $1`, [tcId]);
+      if (tcRes.rows.length > 0) {
+        const tc = tcRes.rows[0];
+        projectId = tc.project_id;
+        url = url || tc.target_url || 'https://demo.playwright.dev/todomvc';
+        prompt = tc.prompt || `Verify ${tc.title}: ${tc.description || ''}`;
+      }
+    }
+
+    if (!url) url = 'https://demo.playwright.dev/todomvc';
+    if (!prompt) prompt = 'Execute autonomous test case validation';
+
+    const jobId = `job_${uuidv4().replace(/-/g, '')}`;
+    const runId = `run_${uuidv4().replace(/-/g, '')}`;
+
+    await pool.query(
+      `INSERT INTO jobs (id, workspace_id, project_id, test_case_id, url, prompt, priority, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [jobId, 'default', projectId, tcId || null, url, prompt, 'interactive', 'pending']
+    );
+
+    await pool.query(
+      `INSERT INTO runs (id, job_id, project_id, test_case_id, status)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [runId, jobId, projectId, tcId || null, 'running']
+    );
+
+    if (tcId) {
+      await pool.query(
+        `UPDATE test_cases SET last_run_id = $1, status = 'ongoing', updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [runId, tcId]
+      );
+    }
+
+    await qaJobQueue.add(
+      'execute-qa-run',
+      {
+        jobId,
+        runId,
+        url,
+        prompt,
+        workspaceId: 'default',
+        projectId,
+        testCaseId: tcId,
+        priority: 'interactive',
+        maxSteps: 15,
+      },
+      {
+        jobId,
+        priority: 1,
+      }
+    );
+
+    return reply.status(201).send({
+      success: true,
+      job_id: jobId,
+      jobId,
+      runId,
+      status: 'pending',
+      message: 'Playwright autonomous test job launched successfully',
+    });
+  });
+
   // List recent jobs
   const handleListJobs = async (req: FastifyRequest<{ Querystring: { projectId?: string } }>, reply: FastifyReply) => {
     const { projectId } = req.query || {};
