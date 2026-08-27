@@ -292,7 +292,7 @@ export default function TestCases() {
 
   // Group test cases by requirement_id
   const grouped = (filteredTestCases || []).reduce((acc: any, tc: any) => {
-    const rid = tc.requirement_id || "none";
+    const rid = tc.requirement_id || tc.requirementId || "none";
     if (!acc[rid]) acc[rid] = [];
     acc[rid].push(tc);
     return acc;
@@ -300,7 +300,7 @@ export default function TestCases() {
 
   const groups = Object.keys(grouped).map((k) => ({
     requirementId: k,
-    title: k === "none" || k === "0" ? "(No Requirement)" : (requirementsMap[k] || `Requirement ${k}`),
+    title: k === "none" || k === "0" || !k ? "(No Requirement)" : (requirementsMap[k] || `Requirement ${k}`),
     testCases: grouped[k],
   }));
 
