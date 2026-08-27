@@ -15,9 +15,9 @@ import { useToast } from "@/hooks/use-toast";
 interface GenerateTestCasesModalProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    requirementId: number;
+    requirementId: string | number;
     requirementTitle: string;
-    projectId: number;
+    projectId: string | number;
 }
 
 interface GeneratedTestCase {

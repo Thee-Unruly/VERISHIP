@@ -181,7 +181,7 @@ export default function TestCases() {
     event.target.value = "";
 
     if (!file) return;
-    if (typeof selectedProject !== "number") {
+    if (!selectedProject) {
       toast({ title: "Select a project first", description: "Choose a project before importing test cases.", variant: "destructive" });
       return;
     }

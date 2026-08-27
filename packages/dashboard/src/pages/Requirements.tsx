@@ -147,7 +147,7 @@ export default function Requirements() {
     event.target.value = "";
 
     if (!file) return;
-    if (typeof selectedProject !== "number") {
+    if (!selectedProject) {
       toast({ title: "Select a project first", description: "Choose a project before importing requirements.", variant: "destructive" });
       return;
     }
@@ -337,7 +337,7 @@ export default function Requirements() {
             requirementId={selectedRequirement.id}
             requirementTitle={selectedRequirement.title}
           />
-          {typeof selectedProject === 'number' && (
+          {Boolean(selectedProject) && (
             <GenerateTestCasesModal
               isOpen={isGenerateTestsModalOpen}
               onOpenChange={setIsGenerateTestsModalOpen}

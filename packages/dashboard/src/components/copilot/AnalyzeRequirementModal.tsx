@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 interface AnalyzeRequirementModalProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    requirementId: number;
+    requirementId: string | number;
     requirementTitle: string;
 }
 

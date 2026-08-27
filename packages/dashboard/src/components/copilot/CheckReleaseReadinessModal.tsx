@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 interface CheckReleaseReadinessModalProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    releaseId: number;
+    releaseId: string | number;
     releaseVersion: string;
 }
 
