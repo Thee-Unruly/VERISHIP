@@ -4,11 +4,10 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Edit2, Sparkles, Loader2, Beaker, Play, RefreshCw, Upload } from "lucide-react";
+import { Plus, Trash2, Edit2, Sparkles, Loader2, Beaker, RefreshCw, Upload } from "lucide-react";
 import { CreateRequirementModal } from "@/components/modals/CreateRequirementModal";
 import { EditRequirementModal } from "@/components/modals/EditRequirementModal";
 import { GeneratedTestsModal } from "@/components/modals/GeneratedTestsModal";
-import { GenerateAndRunTestModal } from "@/components/modals/GenerateAndRunTestModal";
 import { AnalyzeRequirementModal } from "@/components/copilot/AnalyzeRequirementModal";
 import { GenerateTestCasesModal } from "@/components/copilot/GenerateTestCasesModal";
 import { useCrud } from "@/hooks/use-crud";
@@ -26,7 +25,6 @@ export default function Requirements() {
   const [selectedRequirement, setSelectedRequirement] = useState<any>(null);
   const [isAnalyzeModalOpen, setIsAnalyzeModalOpen] = useState(false);
   const [isGenerateTestsModalOpen, setIsGenerateTestsModalOpen] = useState(false);
-  const [isGenerateAndRunModalOpen, setIsGenerateAndRunModalOpen] = useState(false);
 
   const [analysisLoading, setAnalysisLoading] = useState<{ [key: number]: boolean }>({});
   const [generatedTests, setGeneratedTests] = useState([]);
@@ -135,11 +133,6 @@ export default function Requirements() {
   const handleGenerateTests = async (requirement: any) => {
     setSelectedRequirement(requirement);
     setIsGenerateTestsModalOpen(true);
-  };
-
-  const handleGenerateAndRun = async (requirement: any) => {
-    setSelectedRequirement(requirement);
-    setIsGenerateAndRunModalOpen(true);
   };
 
   const handleImportRequirements = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -285,16 +278,13 @@ export default function Requirements() {
                     <Button variant="ghost" size="sm" onClick={() => handleAnalyzeClarity(req)} disabled={analysisLoading[req.id]}>
                       {analysisLoading[req.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-purple-500" />}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleGenerateTests(req)} disabled={analysisLoading[req.id]}>
+                    <Button variant="ghost" size="sm" onClick={() => handleGenerateTests(req)} disabled={analysisLoading[req.id]} title="Generate Test Cases">
                       {analysisLoading[req.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Beaker className="h-4 w-4 text-green-500" />}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleGenerateAndRun(req)} title="AI generates & runs test">
-                      <Play className="h-4 w-4 text-orange-500" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(req)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(req)} title="Edit Requirement">
                       <Edit2 className="h-4 w-4 text-blue-500" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(req.id)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(req.id)} title="Delete Requirement">
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
@@ -332,11 +322,6 @@ export default function Requirements() {
       {/* Modals */}
       <CreateRequirementModal isOpen={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} projectId={selectedProject} onSuccess={fetchRequirements} />
       <EditRequirementModal isOpen={isEditModalOpen} onOpenChange={setIsEditModalOpen} requirement={selectedRequirement} onSuccess={fetchRequirements} />
-      <GenerateAndRunTestModal
-        open={isGenerateAndRunModalOpen}
-        onOpenChange={setIsGenerateAndRunModalOpen}
-        requirements={filteredRequirements}
-      />
       {selectedRequirement && (
         <>
           <AnalyzeRequirementModal

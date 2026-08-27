@@ -265,6 +265,68 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Update test case
+  fastify.put('/api/test-cases/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as any;
+    const client = await pool.connect();
+    try {
+      const existingRes = await client.query(`SELECT * FROM test_cases WHERE id = $1`, [id]);
+      if (existingRes.rows.length === 0) {
+        return reply.status(404).send({ error: `Test case ${id} not found` });
+      }
+
+      const existing = existingRes.rows[0];
+      const title = body.title !== undefined ? body.title : existing.title;
+      const description = body.description !== undefined ? body.description : existing.description;
+      const testType = body.test_type || body.testType || existing.test_type;
+      const status = body.status !== undefined ? body.status : existing.status;
+      const priority = body.priority !== undefined ? parseInt(body.priority) : (existing.priority || 1);
+      const isAutomated = body.is_automated !== undefined ? Boolean(body.is_automated) : (existing.is_automated || false);
+      const requirementId = body.requirement_id !== undefined ? body.requirement_id : (body.requirementId !== undefined ? body.requirementId : existing.requirement_id);
+      const suiteId = body.suite_id !== undefined ? body.suite_id : (body.suiteId !== undefined ? body.suiteId : existing.suite_id);
+      const targetUrl = body.target_url !== undefined ? body.target_url : (body.targetUrl !== undefined ? body.targetUrl : existing.target_url);
+      const prompt = body.prompt !== undefined ? body.prompt : existing.prompt;
+      const steps = body.steps !== undefined ? JSON.stringify(body.steps) : JSON.stringify(existing.steps || []);
+
+      const updateRes = await client.query(
+        `UPDATE test_cases
+         SET title = $1,
+             description = $2,
+             test_type = $3,
+             status = $4,
+             priority = $5,
+             is_automated = $6,
+             requirement_id = $7,
+             suite_id = $8,
+             target_url = $9,
+             prompt = $10,
+             steps = $11,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $12
+         RETURNING *`,
+        [
+          title,
+          description,
+          testType,
+          status,
+          priority,
+          isAutomated,
+          requirementId || null,
+          suiteId || null,
+          targetUrl || null,
+          prompt || null,
+          steps,
+          id
+        ]
+      );
+
+      return reply.send(mapTestCaseRow(updateRes.rows[0]));
+    } finally {
+      client.release();
+    }
+  });
+
   // Delete test case
   fastify.delete('/api/test-cases/:id', async (request, reply) => {
     const { id } = request.params as { id: string };

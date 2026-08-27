@@ -114,6 +114,8 @@ export async function initDb(maxRetries = 10, retryDelayMs = 2000) {
         description TEXT,
         test_type VARCHAR(50) NOT NULL DEFAULT 'autonomous-agent',
         status VARCHAR(50) NOT NULL DEFAULT 'ready',
+        priority INT DEFAULT 1,
+        is_automated BOOLEAN DEFAULT FALSE,
         target_url TEXT,
         prompt TEXT,
         steps JSONB DEFAULT '[]'::jsonb,
