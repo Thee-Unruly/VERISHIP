@@ -78,11 +78,11 @@ export default function Releases() {
   // Sync selected project when projects list changes
   useEffect(() => {
     if (!projects || projects.length === 0) {
-      setSelectedProject("");
+      setSelectedProjectId("");
       return;
     }
     if (!projects.find((p: any) => p.id === selectedProject)) {
-      setSelectedProject(projects[0].id);
+      setSelectedProjectId(projects[0].id);
     }
   }, [projects]);
 

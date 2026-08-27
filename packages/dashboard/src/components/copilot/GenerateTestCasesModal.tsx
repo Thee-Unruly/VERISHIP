@@ -18,6 +18,7 @@ interface GenerateTestCasesModalProps {
     requirementId: string | number;
     requirementTitle: string;
     projectId: string | number;
+    onSuccess?: () => void;
 }
 
 interface GeneratedTestCase {
@@ -55,6 +56,7 @@ export function GenerateTestCasesModal({
     requirementId,
     requirementTitle,
     projectId,
+    onSuccess,
 }: GenerateTestCasesModalProps) {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<GenerationResult | null>(null);
@@ -100,6 +102,7 @@ export function GenerateTestCasesModal({
             if (!resp.ok) throw new Error("Failed to save test cases");
             toast({ title: "Saved", description: `${selectedCases.length} test cases added to project.` });
             setSelected(new Set());
+            onSuccess?.();
         } catch (error) {
             toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to save test cases", variant: "destructive" });
         } finally {

@@ -353,6 +353,7 @@ export default function Requirements() {
               requirementId={selectedRequirement.id}
               requirementTitle={selectedRequirement.title}
               projectId={selectedProject}
+              onSuccess={fetchRequirements}
             />
           )}
         </>

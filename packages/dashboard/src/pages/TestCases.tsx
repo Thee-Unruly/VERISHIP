@@ -20,7 +20,7 @@ export default function TestCases() {
   const [loading, setLoading] = useState(true);
   const [requirementsMap, setRequirementsMap] = useState<Record<string, string>>({});
   const [requirementTitleMap, setRequirementTitleMap] = useState<Record<string, string>>({});
-  const [currentTab, setCurrentTab] = useState<"ongoing" | "retest" | "pass" | "fail">("ongoing");
+  const [currentTab, setCurrentTab] = useState<"all" | "ongoing" | "retest" | "pass" | "fail">("all");
   const { projects, loading: projectsLoading, refresh, selectedProjectId, setSelectedProjectId } = useProjects();
   const selectedProject = selectedProjectId && selectedProjectId !== "all" ? selectedProjectId : (projects[0]?.id || "");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -51,11 +51,14 @@ export default function TestCases() {
 
     const token = localStorage.getItem("authToken");
     try {
-      const res = await fetch(`/api/test-cases/${selectedProject}?status=${currentTab}`, {
+      const url = currentTab === "all"
+        ? `/api/test-cases/${selectedProject}`
+        : `/api/test-cases/${selectedProject}?status=${currentTab}`;
+      const res = await fetch(url, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await res.json();
-      setTestCases(data);
+      setTestCases(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Error fetching test cases:", err);
     } finally {
@@ -94,7 +97,7 @@ export default function TestCases() {
 
   useEffect(() => {
     fetchTestCases();
-  }, [selectedProject]);
+  }, [selectedProject, currentTab]);
 
   useEffect(() => {
     fetchRequirements();
@@ -124,11 +127,11 @@ export default function TestCases() {
   // Sync selected project when projects list changes
   useEffect(() => {
     if (!projects || projects.length === 0) {
-      setSelectedProject("");
+      setSelectedProjectId("");
       return;
     }
     if (!projects.find((p: any) => p.id === selectedProject)) {
-      setSelectedProject(projects[0].id);
+      setSelectedProjectId(projects[0].id);
     }
   }, [projects]);
 
@@ -359,6 +362,12 @@ export default function TestCases() {
         </div>
 
         <div className="mb-4 flex gap-2">
+          <button
+            className={`px-3 py-1 rounded ${currentTab === "all" ? "bg-accent text-accent-foreground" : "bg-muted"}`}
+            onClick={() => setCurrentTab("all")}
+          >
+            All
+          </button>
           <button
             className={`px-3 py-1 rounded ${currentTab === "ongoing" ? "bg-accent text-accent-foreground" : "bg-muted"}`}
             onClick={() => setCurrentTab("ongoing")}

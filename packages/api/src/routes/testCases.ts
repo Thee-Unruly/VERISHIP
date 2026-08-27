@@ -79,9 +79,19 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
         WHERE tc.project_id = $1
       `;
       const params: any[] = [id];
-      if (status) {
-        params.push(status);
-        query += ` AND tc.status = $${params.length}`;
+      if (status && status !== 'all') {
+        if (status === 'ongoing' || status === 'ready') {
+          query += ` AND (tc.status IN ('ongoing', 'ready', 'draft', 'active') OR tc.status IS NULL)`;
+        } else if (status === 'retest') {
+          query += ` AND (tc.status IN ('retest', 'needs-review') OR r.status = 'retest')`;
+        } else if (status === 'pass' || status === 'passed') {
+          query += ` AND (tc.status IN ('pass', 'passed', 'completed') OR r.status = 'passed')`;
+        } else if (status === 'fail' || status === 'failed') {
+          query += ` AND (tc.status IN ('fail', 'failed') OR r.status = 'failed')`;
+        } else {
+          params.push(status);
+          query += ` AND tc.status = $${params.length}`;
+        }
       }
       query += ` ORDER BY tc.created_at DESC`;
 
@@ -149,6 +159,7 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
         title: string;
         description?: string;
         test_type?: string;
+        status?: string;
         priority?: number;
         test_steps?: string[];
         expected_result?: string;
@@ -189,7 +200,7 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
             tc.title,
             tc.description || null,
             testType,
-            'ready',
+            tc.status || 'ongoing',
             'https://demo.playwright.dev/todomvc',
             `Verify ${tc.title}: ${tc.description || ''}`,
             JSON.stringify(steps)
