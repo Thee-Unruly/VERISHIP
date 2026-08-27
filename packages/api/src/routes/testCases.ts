@@ -286,8 +286,27 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
       const requirementId = body.requirement_id !== undefined ? body.requirement_id : (body.requirementId !== undefined ? body.requirementId : existing.requirement_id);
       const suiteId = body.suite_id !== undefined ? body.suite_id : (body.suiteId !== undefined ? body.suiteId : existing.suite_id);
       const targetUrl = body.target_url !== undefined ? body.target_url : (body.targetUrl !== undefined ? body.targetUrl : existing.target_url);
-      const prompt = body.prompt !== undefined ? body.prompt : existing.prompt;
-      const steps = body.steps !== undefined ? JSON.stringify(body.steps) : JSON.stringify(existing.steps || []);
+      
+      // Dynamically update prompt when description or title changes
+      const prompt = body.prompt !== undefined 
+        ? body.prompt 
+        : (description && description.trim() ? `Verify ${title}: ${description}` : existing.prompt);
+
+      // Dynamically update structured steps when description changes
+      let stepsArray: any[] = [];
+      if (body.steps !== undefined && Array.isArray(body.steps) && body.steps.length > 0) {
+        stepsArray = body.steps;
+      } else if (description && description.trim()) {
+        const stepLines = description.split('\n').map((l: string) => l.trim()).filter(Boolean);
+        stepsArray = stepLines.map((line: string, index: number) => ({
+          stepNumber: index + 1,
+          action: line,
+          expectedResult: 'Verify expected step outcome and system assertions.'
+        }));
+      } else {
+        stepsArray = existing.steps || [];
+      }
+      const steps = JSON.stringify(stepsArray);
 
       const updateRes = await client.query(
         `UPDATE test_cases

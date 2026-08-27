@@ -67,6 +67,7 @@ export function RunTestSimulationModal({
 
     const defaultUrl = testCase?.target_url || testCase?.targetUrl || "https://demo.playwright.dev/todomvc";
     const [targetUrl, setTargetUrl] = useState(defaultUrl);
+    const [executionPrompt, setExecutionPrompt] = useState("");
     const [jobId, setJobId] = useState<string | null>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
@@ -80,6 +81,10 @@ export function RunTestSimulationModal({
     useEffect(() => {
         if (testCase && isOpen) {
             setTargetUrl(testCase.target_url || testCase.targetUrl || "https://demo.playwright.dev/todomvc");
+            const promptText = (testCase.description && testCase.description.trim())
+                ? `Verify ${testCase.title}: ${testCase.description.trim()}`
+                : (testCase.prompt || `Verify ${testCase.title}`);
+            setExecutionPrompt(promptText);
             setJobId(null);
             setIsRunning(false);
             setLogs([]);
@@ -189,6 +194,7 @@ export function RunTestSimulationModal({
                 body: JSON.stringify({
                     test_case_id: testCase.id,
                     target_base_url: targetUrl,
+                    prompt: executionPrompt,
                     browser: "chromium",
                 }),
             });
@@ -257,9 +263,24 @@ export function RunTestSimulationModal({
                 </DialogHeader>
 
                 <div className="space-y-5 pt-2">
-                    {/* Target URL & Launch Bar */}
+                    {/* Target URL & Execution Prompt */}
                     <Card className="border-border/60 bg-muted/30">
-                        <CardContent className="pt-4 pb-4">
+                        <CardContent className="pt-4 pb-4 space-y-3">
+                            <div className="space-y-1 w-full">
+                                <Label htmlFor="execution-prompt" className="text-xs font-semibold uppercase text-muted-foreground">
+                                    Execution Instructions & Test Steps
+                                </Label>
+                                <textarea
+                                    id="execution-prompt"
+                                    value={executionPrompt}
+                                    onChange={(e) => setExecutionPrompt(e.target.value)}
+                                    placeholder="Verify test case steps and assertions..."
+                                    disabled={isRunning}
+                                    rows={3}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 leading-relaxed"
+                                />
+                            </div>
+
                             <div className="flex flex-col sm:flex-row gap-3 items-end">
                                 <div className="flex-1 space-y-1 w-full">
                                     <Label htmlFor="target-url" className="text-xs font-semibold uppercase text-muted-foreground">
@@ -277,7 +298,7 @@ export function RunTestSimulationModal({
                                 <Button
                                     onClick={handleRunTest}
                                     disabled={isRunning || !testCase}
-                                    className="h-10 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm"
+                                    className="h-10 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm shrink-0"
                                 >
                                     {isRunning ? (
                                         <>

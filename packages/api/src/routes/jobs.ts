@@ -122,11 +122,11 @@ export async function jobRoutes(fastify: FastifyInstance) {
 
   // Playwright Test Case Runner Endpoint
   fastify.post('/api/test-runs/run-test-case', async (req: any, reply) => {
-    const { test_case_id, testCaseId, target_base_url, targetUrl, browser } = req.body || {};
+    const { test_case_id, testCaseId, target_base_url, targetUrl, browser, prompt: customPrompt } = req.body || {};
     const tcId = test_case_id || testCaseId;
     
     let url = target_base_url || targetUrl;
-    let prompt = '';
+    let prompt = (customPrompt && typeof customPrompt === 'string' && customPrompt.trim()) ? customPrompt.trim() : '';
     let projectId = null;
 
     if (tcId) {
@@ -135,7 +135,11 @@ export async function jobRoutes(fastify: FastifyInstance) {
         const tc = tcRes.rows[0];
         projectId = tc.project_id;
         url = url || tc.target_url || 'https://demo.playwright.dev/todomvc';
-        prompt = tc.prompt || `Verify ${tc.title}: ${tc.description || ''}`;
+        if (!prompt) {
+          prompt = (tc.description && tc.description.trim())
+            ? `Verify ${tc.title}: ${tc.description.trim()}`
+            : (tc.prompt || `Verify ${tc.title}`);
+        }
       }
     }
 
