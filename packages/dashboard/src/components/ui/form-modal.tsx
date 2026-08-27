@@ -6,6 +6,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface FormModalProps {
     isOpen: boolean;
@@ -15,6 +16,9 @@ interface FormModalProps {
     children: React.ReactNode;
     onSubmit?: () => void;
     isLoading?: boolean;
+    className?: string;
+    submitText?: string;
+    loadingText?: string;
 }
 
 export function FormModal({
@@ -25,18 +29,25 @@ export function FormModal({
     children,
     onSubmit,
     isLoading = false,
+    className,
+    submitText,
+    loadingText,
 }: FormModalProps) {
+    const isEdit = title.toLowerCase().includes("edit") || title.toLowerCase().includes("update");
+    const defaultSubmit = submitText || (isEdit ? "Save Changes" : "Create");
+    const defaultLoading = loadingText || (isEdit ? "Saving..." : "Creating...");
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
+            <DialogContent className={cn("max-w-2xl max-h-[90vh] overflow-y-auto", className)}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     {description && <DialogDescription>{description}</DialogDescription>}
                 </DialogHeader>
-                <div className="space-y-4">
+                <div className="space-y-4 pt-1">
                     {children}
                     {onSubmit && (
-                        <div className="flex gap-2 justify-end pt-4">
+                        <div className="flex gap-2 justify-end pt-4 border-t mt-4">
                             <Button
                                 variant="outline"
                                 onClick={() => onOpenChange(false)}
@@ -45,7 +56,7 @@ export function FormModal({
                                 Cancel
                             </Button>
                             <Button onClick={onSubmit} disabled={isLoading}>
-                                {isLoading ? "Creating..." : "Create"}
+                                {isLoading ? defaultLoading : defaultSubmit}
                             </Button>
                         </div>
                     )}

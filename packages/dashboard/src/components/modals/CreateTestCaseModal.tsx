@@ -85,74 +85,89 @@ export function CreateTestCaseModal({
             description="Add a new test case to this project"
             onSubmit={handleSubmit}
             isLoading={loading}
+            className="max-w-3xl"
+            submitText="Create Test Case"
+            loadingText="Creating Test Case..."
         >
             <div className="space-y-4">
+                {/* Title */}
                 <div>
-                    <Label htmlFor="title">Title *</Label>
+                    <Label htmlFor="create-title" className="text-sm font-semibold">Title *</Label>
                     <Input
-                        id="title"
-                        placeholder="Test case title"
+                        id="create-title"
+                        placeholder="Test case title (e.g. Verify checkout with discount code)"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         disabled={loading}
+                        className="mt-1"
                     />
                 </div>
+
+                {/* Horizontal Grid for Meta Settings */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <Label htmlFor="create-requirement" className="text-sm font-semibold">Link to Requirement</Label>
+                        <Select value={requirementId} onValueChange={setRequirementId} disabled={loading}>
+                            <SelectTrigger id="create-requirement" className="mt-1">
+                                <SelectValue placeholder="Select a requirement" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">-- No Requirement --</SelectItem>
+                                {requirements.map((req: any) => (
+                                    <SelectItem key={req.id} value={req.id.toString()}>
+                                        {req.title}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div>
+                        <Label htmlFor="create-test-type" className="text-sm font-semibold">Test Type *</Label>
+                        <Select value={testType} onValueChange={setTestType} disabled={loading}>
+                            <SelectTrigger id="create-test-type" className="mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="manual">Manual</SelectItem>
+                                <SelectItem value="automated">Automated</SelectItem>
+                                <SelectItem value="autonomous-agent">Autonomous Agent</SelectItem>
+                                <SelectItem value="smoke">Smoke</SelectItem>
+                                <SelectItem value="regression">Regression</SelectItem>
+                                <SelectItem value="performance">Performance</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div>
+                        <Label htmlFor="create-priority" className="text-sm font-semibold">Priority</Label>
+                        <Select value={priority} onValueChange={setPriority} disabled={loading}>
+                            <SelectTrigger id="create-priority" className="mt-1">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="1">Critical (P1)</SelectItem>
+                                <SelectItem value="2">High (P2)</SelectItem>
+                                <SelectItem value="3">Medium (P3)</SelectItem>
+                                <SelectItem value="4">Low (P4)</SelectItem>
+                                <SelectItem value="5">Lowest (P5)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                {/* Description */}
                 <div>
-                    <Label htmlFor="description">Description</Label>
+                    <Label htmlFor="create-description" className="text-sm font-semibold">Description & Test Steps</Label>
                     <Textarea
-                        id="description"
-                        placeholder="Steps and expected results"
+                        id="create-description"
+                        placeholder="Step 1: Navigate to page...&#10;Step 2: Enter valid inputs...&#10;Expected: Success message appears."
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         disabled={loading}
-                        rows={3}
+                        rows={6}
+                        className="mt-1 font-mono text-sm leading-relaxed"
                     />
-                </div>
-                <div>
-                    <Label htmlFor="requirement">Link to Requirement</Label>
-                    <Select value={requirementId} onValueChange={setRequirementId} disabled={loading}>
-                        <SelectTrigger id="requirement">
-                            <SelectValue placeholder="Select a requirement (optional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">-- No Requirement --</SelectItem>
-                            {requirements.map((req: any) => (
-                                <SelectItem key={req.id} value={req.id.toString()}>
-                                    {req.requirement_id || req.title}: {req.title}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div>
-                    <Label htmlFor="test-type">Test Type *</Label>
-                    <Select value={testType} onValueChange={setTestType} disabled={loading}>
-                        <SelectTrigger id="test-type">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="manual">Manual</SelectItem>
-                            <SelectItem value="automated">Automated</SelectItem>
-                            <SelectItem value="smoke">Smoke</SelectItem>
-                            <SelectItem value="regression">Regression</SelectItem>
-                            <SelectItem value="performance">Performance</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div>
-                    <Label htmlFor="priority">Priority</Label>
-                    <Select value={priority} onValueChange={setPriority} disabled={loading}>
-                        <SelectTrigger id="priority">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="1">Critical</SelectItem>
-                            <SelectItem value="2">High</SelectItem>
-                            <SelectItem value="3">Medium</SelectItem>
-                            <SelectItem value="4">Low</SelectItem>
-                            <SelectItem value="5">Lowest</SelectItem>
-                        </SelectContent>
-                    </Select>
                 </div>
             </div>
         </FormModal>
