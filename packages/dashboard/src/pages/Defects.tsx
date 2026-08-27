@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bug, Plus, Trash2, Edit2, RefreshCw, Upload, CheckSquare, Layers, AlertTriangle, ExternalLink, Image as ImageIcon } from "lucide-react";
+import { Bug, Plus, Trash2, Edit2, RefreshCw, Upload, CheckSquare, Layers, AlertTriangle, ExternalLink, Image as ImageIcon, ChevronDown, ChevronRight, ChevronsUpDown } from "lucide-react";
 import { CreateDefectModal } from "@/components/modals/CreateDefectModal";
 import { EditDefectModal } from "@/components/modals/EditDefectModal";
 import { useCrud } from "@/hooks/use-crud";
@@ -21,8 +21,22 @@ export default function Defects() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedDefect, setSelectedDefect] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<string | "">("");
+  const [expandedDefects, setExpandedDefects] = useState<Record<string | number, boolean>>({});
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
+
+  const toggleExpand = (id: string | number) => {
+    setExpandedDefects((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleExpandAll = () => {
+    const areAllExpanded = filteredDefects.length > 0 && filteredDefects.every((d) => expandedDefects[d.id]);
+    const next: Record<string | number, boolean> = {};
+    filteredDefects.forEach((d) => {
+      next[d.id] = !areAllExpanded;
+    });
+    setExpandedDefects(next);
+  };
 
   const { delete: deleteDefect } = useCrud({
     baseUrl: "/api/defects",
@@ -256,6 +270,18 @@ export default function Defects() {
               <Upload className="h-4 w-4 mr-2" />
               Import File
             </Button>
+            {filteredDefects.length > 0 && (
+              <Button
+                onClick={handleExpandAll}
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                title="Expand or collapse all defect details"
+              >
+                <ChevronsUpDown className="h-4 w-4" />
+                {filteredDefects.every((d) => expandedDefects[d.id]) ? "Collapse All" : "Expand All"}
+              </Button>
+            )}
             <Button onClick={handleRefresh} variant="outline" size="sm">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -267,44 +293,46 @@ export default function Defects() {
           </div>
         </div>
 
-        <div className="mb-4">
-          <label className="text-sm font-medium">Filter by Project:</label>
-          <select
-            value={selectedProjectId || selectedProject}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="mt-2 rounded border border-input bg-background px-3 py-2"
-          >
-            {projects.length === 0 ? (
-              <option value="">No projects</option>
-            ) : (
-              projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))
-            )}
-          </select>
-        </div>
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Filter by Project:</label>
+            <select
+              value={selectedProjectId || selectedProject}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="rounded border border-input bg-background px-3 py-1.5 text-sm"
+            >
+              {projects.length === 0 ? (
+                <option value="">No projects</option>
+              ) : (
+                projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))
+              )}
+            </select>
+          </div>
 
-        <div className="mb-4 flex items-center gap-3">
-          <label className="text-sm font-medium">Status:</label>
-          <div className="flex gap-2">
-            <button
-              className={`px-3 py-1 rounded ${statusFilter === "" ? "bg-primary text-white" : "border"}`}
-              onClick={() => setStatusFilter("")}
-            >
-              All
-            </button>
-            <button
-              className={`px-3 py-1 rounded ${statusFilter === "open" ? "bg-primary text-white" : "border"}`}
-              onClick={() => setStatusFilter("open")}
-            >
-              Open
-            </button>
-            <button
-              className={`px-3 py-1 rounded ${statusFilter === "completed" ? "bg-primary text-white" : "border"}`}
-              onClick={() => setStatusFilter("completed")}
-            >
-              Completed
-            </button>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium">Status:</label>
+            <div className="flex gap-1.5">
+              <button
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "" ? "bg-primary text-white" : "border bg-background hover:bg-muted"}`}
+                onClick={() => setStatusFilter("")}
+              >
+                All ({defects.length})
+              </button>
+              <button
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "open" ? "bg-primary text-white" : "border bg-background hover:bg-muted"}`}
+                onClick={() => setStatusFilter("open")}
+              >
+                Open ({defects.filter((d) => (d.status || "").toLowerCase() === "open").length})
+              </button>
+              <button
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${statusFilter === "completed" ? "bg-primary text-white" : "border bg-background hover:bg-muted"}`}
+                onClick={() => setStatusFilter("completed")}
+              >
+                Completed ({defects.filter((d) => ["resolved", "closed"].includes((d.status || "").toLowerCase())).length})
+              </button>
+            </div>
           </div>
         </div>
 
@@ -321,130 +349,214 @@ export default function Defects() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
-            {filteredDefects.map((defect) => (
-              <Card key={defect.id} className="border hover:shadow-sm transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <CardTitle className="text-base font-bold flex items-center gap-2">
-                          <Bug className="h-4 w-4 text-destructive shrink-0" />
+          <div className="space-y-2.5">
+            {filteredDefects.map((defect) => {
+              const isExpanded = !!expandedDefects[defect.id];
+              const testCaseTitle = defect.test_case_title || defect.testCaseTitle;
+              const reqTitle = defect.requirement_title || defect.requirementTitle;
+              const rootCause = defect.root_cause_analysis || defect.rootCauseAnalysis;
+              const suggestedFix = defect.suggested_fix || defect.suggestedFix;
+              const screenshotUrl = defect.screenshot_url || defect.screenshotUrl;
+              const traceUrl = defect.trace_url || defect.traceUrl;
+
+              return (
+                <Card
+                  key={defect.id}
+                  className={`border transition-all ${
+                    isExpanded ? "shadow-sm border-primary/40 bg-card" : "hover:border-border/80 bg-card/70 hover:bg-card"
+                  }`}
+                >
+                  {/* Compressed Header Row */}
+                  <div
+                    onClick={() => toggleExpand(defect.id)}
+                    className="p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground shrink-0 p-0.5 rounded hover:bg-muted"
+                        aria-label={isExpanded ? "Collapse defect" : "Expand defect"}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-primary" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </button>
+
+                      <Bug className="h-4 w-4 text-destructive shrink-0" />
+
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="font-semibold text-sm text-foreground truncate max-w-[280px] sm:max-w-md">
                           {defect.title}
-                        </CardTitle>
-                        <Badge variant={getSeverityColor(defect.severity)}>
+                        </span>
+
+                        <Badge variant={getSeverityColor(defect.severity)} className="text-[10px] py-0 px-1.5 h-4 font-semibold uppercase">
                           {defect.severity}
                         </Badge>
-                        <Badge variant="outline" className="capitalize">{defect.status}</Badge>
-                      </div>
 
-                      <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
-                        {defect.description}
-                      </p>
+                        <Badge
+                          variant={["resolved", "closed"].includes((defect.status || "").toLowerCase()) ? "outline" : "secondary"}
+                          className={`text-[10px] py-0 px-1.5 h-4 capitalize font-medium ${
+                            ["resolved", "closed"].includes((defect.status || "").toLowerCase()) ? "border-emerald-400 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40" : ""
+                          }`}
+                        >
+                          {defect.status}
+                        </Badge>
 
-                      {/* Linked Context: Test Case & Requirement */}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {(defect.test_case_title || defect.testCaseTitle) && (
-                          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs flex items-center gap-1 font-medium">
-                            <CheckSquare className="h-3 w-3" />
-                            Test Case: {defect.test_case_title || defect.testCaseTitle}
+                        {testCaseTitle && (
+                          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 text-[10px] py-0 px-1.5 h-4 flex items-center gap-1 font-normal truncate max-w-[180px]">
+                            <CheckSquare className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{testCaseTitle}</span>
                           </Badge>
                         )}
-                        {(defect.requirement_title || defect.requirementTitle) && (
-                          <Badge variant="outline" className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-300 text-xs flex items-center gap-1 font-medium">
-                            <Layers className="h-3 w-3" />
-                            Requirement: {defect.requirement_title || defect.requirementTitle}
+
+                        {reqTitle && (
+                          <Badge variant="outline" className="bg-purple-500/5 text-purple-700 dark:text-purple-300 border-purple-300 text-[10px] py-0 px-1.5 h-4 flex items-center gap-1 font-normal truncate max-w-[180px]">
+                            <Layers className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{reqTitle}</span>
                           </Badge>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    {/* Right Action Icons & Date */}
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {defect.created_at && (
+                        <span className="text-[11px] text-muted-foreground hidden md:inline-block font-mono">
+                          {new Date(defect.created_at || defect.createdAt).toLocaleDateString()}
+                        </span>
+                      )}
+
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-7 w-7 p-0"
                         onClick={() => handleEdit(defect)}
                         title="Edit defect"
                       >
-                        <Edit2 className="h-4 w-4 text-blue-500" />
+                        <Edit2 className="h-3.5 w-3.5 text-blue-500" />
                       </Button>
+
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-7 w-7 p-0"
                         onClick={() => handleDelete(defect.id)}
                         title="Delete defect"
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     </div>
                   </div>
-                </CardHeader>
 
-                <CardContent className="space-y-3 pt-0">
-                  {/* Root Cause Analysis & Suggested Fix */}
-                  {(defect.root_cause_analysis || defect.rootCauseAnalysis || defect.suggested_fix || defect.suggestedFix) && (
-                    <div className="p-3 rounded-lg bg-muted/40 border text-xs space-y-1.5">
-                      {(defect.root_cause_analysis || defect.rootCauseAnalysis) && (
-                        <div>
-                          <span className="font-semibold text-foreground flex items-center gap-1 mb-0.5">
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                            Failure Reason & Root Cause:
-                          </span>
-                          <p className="text-muted-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed pl-4">
-                            {defect.root_cause_analysis || defect.rootCauseAnalysis}
-                          </p>
-                        </div>
-                      )}
-                      {(defect.suggested_fix || defect.suggestedFix) && (
-                        <div className="pt-1 border-t border-border/50">
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                            Suggested Fix:{" "}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {defect.suggested_fix || defect.suggestedFix}
-                          </span>
-                        </div>
-                      )}
+                  {/* One-line preview if collapsed and description exists */}
+                  {!isExpanded && defect.description && (
+                    <div
+                      onClick={() => toggleExpand(defect.id)}
+                      className="px-3.5 pb-2.5 pt-0 -mt-1 cursor-pointer"
+                    >
+                      <p className="text-xs text-muted-foreground line-clamp-1 pl-6 font-mono">
+                        {defect.description}
+                      </p>
                     </div>
                   )}
 
-                  {/* Metadata Bar & Artifacts */}
-                  <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground border-t">
-                    <div className="flex items-center gap-4">
-                      <span>ID: <strong className="font-mono text-foreground">{defect.defect_id || defect.id}</strong></span>
-                      {defect.created_at && (
-                        <span>Logged: <strong>{new Date(defect.created_at || defect.createdAt).toLocaleString()}</strong></span>
+                  {/* Expanded Body View */}
+                  {isExpanded && (
+                    <CardContent className="space-y-3.5 pt-2 pb-4 px-4 border-t bg-muted/10 animate-fade-in text-xs">
+                      {/* Description */}
+                      {defect.description && (
+                        <div className="space-y-1">
+                          <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider text-muted-foreground">
+                            Description:
+                          </span>
+                          <p className="text-foreground whitespace-pre-line leading-relaxed pl-1 font-mono text-xs">
+                            {defect.description}
+                          </p>
+                        </div>
                       )}
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      {(defect.screenshot_url || defect.screenshotUrl) && (
-                        <a
-                          href={defect.screenshot_url || defect.screenshotUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-blue-600 hover:underline"
-                        >
-                          <ImageIcon className="h-3.5 w-3.5" />
-                          Screenshot
-                        </a>
+                      {/* Root Cause Analysis & Failure Reason Callout */}
+                      {rootCause && (
+                        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs space-y-1">
+                          <span className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            Failure Reason & Root Cause Analysis
+                          </span>
+                          <p className="text-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed pl-5">
+                            {rootCause}
+                          </p>
+                        </div>
                       )}
-                      {(defect.trace_url || defect.traceUrl) && (
-                        <a
-                          href={defect.trace_url || defect.traceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-purple-600 hover:underline"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          Trace
-                        </a>
+
+                      {/* Suggested Fix */}
+                      {suggestedFix && (
+                        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-1">
+                          <span className="font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                            💡 Suggested Fix & Recommendation
+                          </span>
+                          <p className="text-foreground whitespace-pre-wrap text-[11px] leading-relaxed pl-5">
+                            {suggestedFix}
+                          </p>
+                        </div>
                       )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                      {/* Screenshots & Playwright Trace */}
+                      {(screenshotUrl || traceUrl) && (
+                        <div className="space-y-2 pt-2 border-t">
+                          <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider text-muted-foreground">
+                            Execution Artifacts:
+                          </span>
+                          <div className="flex flex-wrap items-center gap-3">
+                            {screenshotUrl && (
+                              <a
+                                href={screenshotUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="group relative rounded-lg border overflow-hidden block hover:border-primary transition-colors"
+                              >
+                                <img
+                                  src={screenshotUrl}
+                                  alt="Defect Screenshot"
+                                  className="h-24 w-40 object-cover group-hover:scale-105 transition-transform"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold gap-1">
+                                  <ImageIcon className="h-3.5 w-3.5" />
+                                  View Full Screenshot
+                                </div>
+                              </a>
+                            )}
+
+                            {traceUrl && (
+                              <a
+                                href={traceUrl}
+                                download="playwright-trace.zip"
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-purple-300 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 font-semibold text-xs transition-colors"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                Download Playwright Trace ZIP
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Metadata Footer */}
+                      <div className="flex items-center justify-between pt-2 text-[11px] text-muted-foreground border-t">
+                        <div className="flex items-center gap-4 font-mono">
+                          <span>Defect ID: <strong className="text-foreground">{defect.defect_id || defect.id}</strong></span>
+                          {defect.found_by && <span>Reported By: <strong>{defect.found_by}</strong></span>}
+                        </div>
+                        {defect.created_at && (
+                          <span>Logged: {new Date(defect.created_at || defect.createdAt).toLocaleString()}</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
