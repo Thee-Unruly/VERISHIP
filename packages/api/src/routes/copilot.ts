@@ -3,6 +3,36 @@ import { AIService } from '../services/aiService';
 import { pool } from '../db';
 
 export async function copilotRoutes(fastify: FastifyInstance) {
+  // Get requirement clarity analysis & history
+  fastify.get('/api/copilot/analyze-requirement-clarity/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const client = await pool.connect();
+    try {
+      const reqRes = await client.query(`SELECT * FROM requirements WHERE id = $1`, [id]);
+      if (reqRes.rows.length === 0) {
+        return reply.status(404).send({ error: 'Requirement not found' });
+      }
+      const req = reqRes.rows[0];
+      const history = Array.isArray(req.clarity_history) ? req.clarity_history : [];
+      const latest = history[0] || (req.clarity_score !== null && req.clarity_score !== undefined ? {
+        timestamp: req.updated_at || req.created_at,
+        clarity_score: parseFloat(req.clarity_score),
+        testability_score: req.testability_score ? parseFloat(req.testability_score) : 80,
+        is_testable: (req.testability_score ? parseFloat(req.testability_score) : 80) >= 70,
+        ambiguous_terms: req.ambiguities || [],
+        missing_criteria: req.missing_criteria || [],
+        suggestions: req.suggested_acceptance_criteria || [],
+      } : null);
+
+      return reply.send({
+        analysis: latest,
+        history,
+      });
+    } finally {
+      client.release();
+    }
+  });
+
   // Analyze requirement clarity by requirement ID
   fastify.post('/api/copilot/analyze-requirement-clarity/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -16,6 +46,19 @@ export async function copilotRoutes(fastify: FastifyInstance) {
       const req = reqRes.rows[0];
       const analysis = await AIService.analyzeRequirementClarity(req.title, req.description || '');
 
+      const newHistoryItem = {
+        timestamp: new Date().toISOString(),
+        clarity_score: analysis.clarityScore || 85,
+        testability_score: analysis.testabilityScore || 80,
+        is_testable: (analysis.testabilityScore || 80) >= 70,
+        ambiguous_terms: analysis.ambiguities || [],
+        missing_criteria: analysis.missingCriteria || [],
+        suggestions: analysis.suggestedAcceptanceCriteria || [],
+      };
+
+      const prevHistory = Array.isArray(req.clarity_history) ? req.clarity_history : [];
+      const updatedHistory = [newHistoryItem, ...prevHistory].slice(0, 20);
+
       await client.query(
         `UPDATE requirements
          SET clarity_score = $1,
@@ -23,24 +66,28 @@ export async function copilotRoutes(fastify: FastifyInstance) {
              ambiguities = $3,
              missing_criteria = $4,
              suggested_acceptance_criteria = $5,
+             clarity_history = $6,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $6`,
+         WHERE id = $7`,
         [
           analysis.clarityScore || 85,
           analysis.testabilityScore || 80,
           JSON.stringify(analysis.ambiguities || []),
           JSON.stringify(analysis.missingCriteria || []),
           JSON.stringify(analysis.suggestedAcceptanceCriteria || []),
+          JSON.stringify(updatedHistory),
           id
         ]
       );
 
       return reply.send({
         clarity_score: analysis.clarityScore || 85,
+        testability_score: analysis.testabilityScore || 80,
         is_testable: (analysis.testabilityScore || 80) >= 70,
         ambiguous_terms: analysis.ambiguities || [],
         missing_criteria: analysis.missingCriteria || [],
-        suggestions: analysis.suggestedAcceptanceCriteria || []
+        suggestions: analysis.suggestedAcceptanceCriteria || [],
+        history: updatedHistory,
       });
     } catch (err: any) {
       request.log.error(err);

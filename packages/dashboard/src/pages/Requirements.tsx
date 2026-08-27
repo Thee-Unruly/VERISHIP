@@ -308,11 +308,19 @@ export default function Requirements() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Clarity Score</p>
-                    <p className="font-semibold">{req.clarity_score?.toFixed(1) || "N/A"}%</p>
+                    <p className="font-semibold">
+                      {req.clarity_score !== null && req.clarity_score !== undefined
+                        ? `${Number(req.clarity_score).toFixed(1)}%`
+                        : req.clarityScore !== null && req.clarityScore !== undefined
+                          ? `${Number(req.clarityScore).toFixed(1)}%`
+                          : "N/A"}
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Testable</p>
-                    <p className="font-semibold">{req.is_testable ? "Yes" : "No"}</p>
+                    <p className="font-semibold">
+                      {(req.is_testable ?? req.isTestable ?? ((req.testability_score ?? req.testabilityScore ?? 0) >= 70)) ? "Yes" : "No"}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -336,6 +344,7 @@ export default function Requirements() {
             onOpenChange={setIsAnalyzeModalOpen}
             requirementId={selectedRequirement.id}
             requirementTitle={selectedRequirement.title}
+            onSuccess={fetchRequirements}
           />
           {Boolean(selectedProject) && (
             <GenerateTestCasesModal

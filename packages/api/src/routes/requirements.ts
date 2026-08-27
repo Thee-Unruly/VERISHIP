@@ -182,20 +182,38 @@ export async function requirementRoutes(fastify: FastifyInstance) {
 }
 
 function mapRequirementRow(row: any) {
+  const clarityScore = row.clarity_score !== null && row.clarity_score !== undefined ? parseFloat(row.clarity_score) : undefined;
+  const testabilityScore = row.testability_score !== null && row.testability_score !== undefined ? parseFloat(row.testability_score) : undefined;
+  const isTestable = testabilityScore !== undefined ? testabilityScore >= 70 : true;
+
   return {
     id: row.id,
     projectId: row.project_id,
+    project_id: row.project_id,
     title: row.title,
     description: row.description,
     status: row.status,
-    clarityScore: row.clarity_score ? parseFloat(row.clarity_score) : undefined,
-    testabilityScore: row.testability_score ? parseFloat(row.testability_score) : undefined,
+    priority: row.priority || 1,
+    clarityScore: clarityScore,
+    clarity_score: clarityScore,
+    testabilityScore: testabilityScore,
+    testability_score: testabilityScore,
+    isTestable: isTestable,
+    is_testable: isTestable,
     ambiguities: row.ambiguities || [],
     missingCriteria: row.missing_criteria || [],
+    missing_criteria: row.missing_criteria || [],
     suggestedAcceptanceCriteria: row.suggested_acceptance_criteria || [],
+    suggested_acceptance_criteria: row.suggested_acceptance_criteria || [],
+    clarityHistory: row.clarity_history || [],
+    clarity_history: row.clarity_history || [],
     acceptanceCriteria: row.acceptance_criteria || [],
+    acceptance_criteria: row.acceptance_criteria || [],
     testCaseCount: row.test_case_count || 0,
+    test_case_count: row.test_case_count || 0,
     createdAt: row.created_at,
+    created_at: row.created_at,
     updatedAt: row.updated_at,
+    updated_at: row.updated_at,
   };
 }

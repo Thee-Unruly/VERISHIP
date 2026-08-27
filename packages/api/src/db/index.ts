@@ -82,6 +82,7 @@ export async function initDb(maxRetries = 10, retryDelayMs = 2000) {
         ambiguities JSONB DEFAULT '[]'::jsonb,
         missing_criteria JSONB DEFAULT '[]'::jsonb,
         suggested_acceptance_criteria JSONB DEFAULT '[]'::jsonb,
+        clarity_history JSONB DEFAULT '[]'::jsonb,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
