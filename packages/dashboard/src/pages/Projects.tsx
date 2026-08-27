@@ -223,18 +223,18 @@ export default function Projects() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
             {filteredProjects.map((project: any) => {
               const createdDate = project.created_at || project.createdAt;
               const releaseDate = project.target_release_date || project.targetReleaseDate;
               const membersCount = teamMembers[project.id]?.length || teamMembers[String(project.id)]?.length || 0;
 
               return (
-              <Card key={project.id} className="border shadow-sm hover:shadow transition-shadow flex flex-col">
-                <CardHeader>
+              <Card key={project.id} className="border shadow-sm hover:shadow transition-shadow flex flex-col h-full justify-between">
+                <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-bold truncate pr-2">{project.name}</CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <Badge
                         variant={
                           project.status === "active" || project.status === "on-track"
@@ -243,12 +243,14 @@ export default function Projects() {
                               ? "destructive"
                               : "secondary"
                         }
+                        className="capitalize"
                       >
                         {project.status}
                       </Badge>
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-8 w-8 p-0"
                         onClick={() => handleEdit(project)}
                       >
                         <Edit2 className="h-4 w-4 text-blue-500" />
@@ -256,38 +258,40 @@ export default function Projects() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="h-8 w-8 p-0"
                         onClick={() => handleDelete(project.id)}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {project.description}
+                  <p className="text-sm text-muted-foreground mt-2 line-clamp-2 min-h-[40px] leading-snug">
+                    {project.description || <span className="text-muted-foreground/40 italic">No description provided</span>}
                   </p>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
+
+                <CardContent className="flex-1 flex flex-col justify-between pt-0">
+                  <div className="grid grid-cols-3 gap-2 text-sm pt-2 border-t border-border/40">
                     <div>
-                      <p className="text-muted-foreground">Created</p>
-                      <p className="font-semibold">
+                      <p className="text-xs text-muted-foreground">Created</p>
+                      <p className="font-semibold text-xs sm:text-sm mt-0.5">
                         {createdDate ? new Date(createdDate).toLocaleDateString() : "Recently"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Release Date</p>
-                      <p className="font-semibold">
+                      <p className="text-xs text-muted-foreground">Release Date</p>
+                      <p className="font-semibold text-xs sm:text-sm mt-0.5">
                         {releaseDate ? new Date(releaseDate).toLocaleDateString() : "Not set"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Status</p>
-                      <p className="font-semibold capitalize">{project.status}</p>
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className="font-semibold text-xs sm:text-sm capitalize mt-0.5">{project.status}</p>
                     </div>
                   </div>
 
                   {/* Team Members Section */}
-                  <div className="mt-4 border-t pt-4">
+                  <div className="mt-4 border-t pt-3">
                     <Button
                       variant="ghost"
                       size="sm"
