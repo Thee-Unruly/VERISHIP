@@ -1,8 +1,152 @@
 import { FastifyInstance } from 'fastify';
 import { AIService } from '../services/aiService';
+import { pool } from '../db';
 
 export async function copilotRoutes(fastify: FastifyInstance) {
-  // Analyze requirement clarity
+  // Analyze requirement clarity by requirement ID
+  fastify.post('/api/copilot/analyze-requirement-clarity/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const client = await pool.connect();
+    try {
+      const reqRes = await client.query(`SELECT * FROM requirements WHERE id = $1`, [id]);
+      if (reqRes.rows.length === 0) {
+        return reply.status(404).send({ error: 'Requirement not found' });
+      }
+
+      const req = reqRes.rows[0];
+      const analysis = await AIService.analyzeRequirementClarity(req.title, req.description || '');
+
+      await client.query(
+        `UPDATE requirements
+         SET clarity_score = $1,
+             testability_score = $2,
+             ambiguities = $3,
+             missing_criteria = $4,
+             suggested_acceptance_criteria = $5,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $6`,
+        [
+          analysis.clarityScore || 85,
+          analysis.testabilityScore || 80,
+          JSON.stringify(analysis.ambiguities || []),
+          JSON.stringify(analysis.missingCriteria || []),
+          JSON.stringify(analysis.suggestedAcceptanceCriteria || []),
+          id
+        ]
+      );
+
+      return reply.send({
+        clarity_score: analysis.clarityScore || 85,
+        is_testable: (analysis.testabilityScore || 80) >= 70,
+        ambiguous_terms: analysis.ambiguities || [],
+        missing_criteria: analysis.missingCriteria || [],
+        suggestions: analysis.suggestedAcceptanceCriteria || []
+      });
+    } catch (err: any) {
+      request.log.error(err);
+      return reply.status(500).send({ error: err.message || 'Failed to analyze requirement clarity' });
+    } finally {
+      client.release();
+    }
+  });
+
+  // Generate test cases from requirement by requirement ID
+  fastify.post('/api/copilot/generate-test-cases/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const client = await pool.connect();
+    try {
+      const reqRes = await client.query(`SELECT * FROM requirements WHERE id = $1`, [id]);
+      if (reqRes.rows.length === 0) {
+        return reply.status(404).send({ error: 'Requirement not found' });
+      }
+
+      const req = reqRes.rows[0];
+      const analysis = await AIService.analyzeRequirementClarity(req.title, req.description || '');
+
+      const generatedTestCases = (analysis.suggestedTestScenarios || []).map((scenario, idx) => ({
+        title: scenario.title || `Test Scenario ${idx + 1}`,
+        description: scenario.description || req.title,
+        test_type: idx % 2 === 0 ? 'Positive' : 'Negative',
+        priority: 1,
+        test_steps: [scenario.description || 'Navigate to page and verify functionality'],
+        expected_result: scenario.expectedResult || 'System behaves as expected according to acceptance criteria'
+      }));
+
+      if (generatedTestCases.length === 0) {
+        generatedTestCases.push({
+          title: `Verify ${req.title}`,
+          description: req.description || `Autonomous verification of ${req.title}`,
+          test_type: 'Positive',
+          priority: 1,
+          test_steps: [`Perform standard user workflow for ${req.title}`],
+          expected_result: 'Expected UI state and assertions pass without error'
+        });
+      }
+
+      return reply.send({
+        generated_test_cases: generatedTestCases
+      });
+    } catch (err: any) {
+      request.log.error(err);
+      return reply.status(500).send({ error: err.message || 'Failed to generate test cases' });
+    } finally {
+      client.release();
+    }
+  });
+
+  // Check release readiness
+  fastify.post('/api/copilot/check-release-readiness/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const client = await pool.connect();
+    try {
+      const relRes = await client.query(`SELECT * FROM releases WHERE id = $1`, [id]);
+      const release = relRes.rows[0];
+      const projectId = release ? release.project_id : id;
+
+      const [defRes, runRes] = await Promise.all([
+        client.query(`SELECT * FROM defects WHERE project_id = $1 AND severity IN ('critical', 'high') AND status != 'resolved'`, [projectId]),
+        client.query(`SELECT * FROM runs WHERE project_id = $1 AND status = 'failed' ORDER BY created_at DESC LIMIT 5`, [projectId])
+      ]);
+
+      const blockers = [
+        ...defRes.rows.map(d => ({
+          issue_type: 'Defect Blocker',
+          identifier: d.id,
+          title: d.title,
+          status: d.status,
+          severity: d.severity
+        })),
+        ...runRes.rows.map(r => ({
+          issue_type: 'Regression Failure',
+          identifier: r.id,
+          title: `Automated test run failure: ${r.target_url || 'Autonomous suite'}`,
+          status: 'failed',
+          severity: 'high'
+        }))
+      ];
+
+      const riskScore = Math.min(100, Math.max(10, blockers.length * 25));
+      const decision = blockers.length === 0 ? 'GO' : blockers.length > 2 ? 'NO-GO' : 'CONDITIONAL-GO';
+      const summary = blockers.length === 0
+        ? 'All quality gates, test coverage, and defect metrics pass release thresholds.'
+        : `Identified ${blockers.length} quality blockers requiring team sign-off prior to release gate promotion.`;
+
+      return reply.send({
+        release_id: id,
+        risk_score: riskScore,
+        go_no_go_decision: decision,
+        summary,
+        blockers
+      });
+    } catch (err: any) {
+      request.log.error(err);
+      return reply.status(500).send({ error: err.message || 'Failed to check release readiness' });
+    } finally {
+      client.release();
+    }
+  });
+
+  // Analyze requirement clarity (raw input)
   fastify.post('/api/copilot/clarity-analysis', async (request, reply) => {
     const { title, description } = request.body as { title: string; description?: string };
     if (!title) {

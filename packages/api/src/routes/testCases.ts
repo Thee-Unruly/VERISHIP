@@ -138,6 +138,72 @@ export async function testCaseRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Batch add test cases (e.g. from Copilot generation)
+  fastify.post('/api/test-cases/batch-add', async (request, reply) => {
+    const body = request.body as {
+      project_id?: string;
+      projectId?: string;
+      requirement_id?: string;
+      requirementId?: string;
+      test_cases?: Array<{
+        title: string;
+        description?: string;
+        test_type?: string;
+        priority?: number;
+        test_steps?: string[];
+        expected_result?: string;
+      }>;
+    };
+
+    const projectId = body.projectId || body.project_id;
+    const requirementId = body.requirementId || body.requirement_id;
+    const testCases = body.test_cases || [];
+
+    if (!projectId || testCases.length === 0) {
+      return reply.status(400).send({ error: 'projectId and test_cases are required' });
+    }
+
+    const client = await pool.connect();
+    try {
+      const inserted = [];
+      for (const tc of testCases) {
+        const id = `tc_${crypto.randomUUID().slice(0, 8)}`;
+        const testType = tc.test_type === 'Negative' ? 'autonomous-agent' : 'autonomous-agent';
+        const steps = (tc.test_steps || []).map((step, idx) => ({
+          stepNumber: idx + 1,
+          action: step,
+          expectedResult: tc.expected_result || 'Expected assertion succeeds'
+        }));
+
+        const res = await client.query(
+          `INSERT INTO test_cases (
+            id, project_id, requirement_id, title, description,
+            test_type, status, target_url, prompt, steps
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           RETURNING *`,
+          [
+            id,
+            projectId,
+            requirementId || null,
+            tc.title,
+            tc.description || null,
+            testType,
+            'ready',
+            'https://demo.playwright.dev/todomvc',
+            `Verify ${tc.title}: ${tc.description || ''}`,
+            JSON.stringify(steps)
+          ]
+        );
+        inserted.push(mapTestCaseRow(res.rows[0]));
+      }
+
+      return reply.status(201).send({ success: true, count: inserted.length, testCases: inserted });
+    } finally {
+      client.release();
+    }
+  });
+
   // Auto-generate test cases from requirement using Quality Copilot
   fastify.post('/api/requirements/:id/generate-tests', async (request, reply) => {
     const { id } = request.params as { id: string };
