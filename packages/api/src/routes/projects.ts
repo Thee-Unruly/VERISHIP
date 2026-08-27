@@ -218,6 +218,41 @@ export async function projectRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.put('/api/projects/:id/team/:memberId', async (request, reply) => {
+    const { id, memberId } = request.params as { id: string; memberId: string };
+    const body = request.body as { name?: string; email?: string; role?: string };
+    const client = await pool.connect();
+    try {
+      if (body.name || body.email) {
+        const nameParts = (body.name || '').trim().split(' ');
+        const firstName = nameParts[0] || null;
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+
+        await client.query(
+          `UPDATE users
+           SET first_name = COALESCE($1, first_name),
+               last_name = COALESCE($2, last_name),
+               email = COALESCE($3, email)
+           WHERE id = $4`,
+          [firstName, lastName, body.email || null, memberId]
+        );
+      }
+
+      if (body.role) {
+        await client.query(
+          `UPDATE user_project_assignment
+           SET role = $1
+           WHERE project_id = $2 AND user_id = $3`,
+          [body.role, id, memberId]
+        );
+      }
+
+      return reply.send({ success: true, message: 'Team member updated' });
+    } finally {
+      client.release();
+    }
+  });
+
   fastify.delete('/api/projects/:id/team/:memberId', async (request, reply) => {
     const { id, memberId } = request.params as { id: string; memberId: string };
     const client = await pool.connect();
