@@ -506,4 +506,99 @@ AVAILABLE TOOLS:
   }
 );
 
-console.log('[VeriShip Worker Engine] BullMQ Worker started and waiting for QA jobs...');
+import { SessionCapturer } from './recorder/sessionCapturer';
+import { AISynthesizer } from './recorder/aiSynthesizer';
+
+// Active in-memory interactive recording sessions
+const activeCapturers = new Map<string, SessionCapturer>();
+
+// Redis subscriber for Interactive Screen Recording Studio
+const subRedis = new Redis({
+  host: connection.host,
+  port: connection.port,
+  maxRetriesPerRequest: null,
+});
+
+subRedis.subscribe('recording_events').then(() => {
+  console.log('[Worker Engine] Subscribed to recording_events channel.');
+}).catch((err) => {
+  console.error('[Worker Engine] Failed to subscribe to recording_events:', err.message);
+});
+
+subRedis.on('message', async (channel, message) => {
+  if (channel !== 'recording_events') return;
+
+  try {
+    const payload = JSON.parse(message);
+
+    // 1. Spin up browser and start recording
+    if (payload.event === 'start_session_capturer') {
+      const { sessionId, targetUrl, workspaceId, projectId, authMode } = payload;
+      console.log(`[Worker Engine] Spawning interactive browser capturer for session: ${sessionId} -> ${targetUrl}`);
+
+      const capturer = new SessionCapturer({
+        sessionId,
+        targetUrl,
+        workspaceId,
+        projectId,
+        authMode,
+        pool,
+        pubRedis,
+      });
+
+      activeCapturers.set(sessionId, capturer);
+
+      try {
+        await capturer.start();
+        console.log(`[Worker Engine] Interactive browser launched & capturing for session ${sessionId}`);
+      } catch (startErr: any) {
+        console.error(`[Worker Engine] Error launching browser capturer:`, startErr.message);
+        await capturer.abort(`Failed to launch browser: ${startErr.message}`);
+        activeCapturers.delete(sessionId);
+      }
+    }
+
+    // 2. Stop browser recording & synthesize Playwright test
+    if (payload.event === 'stop_session_capturer') {
+      const { sessionId } = payload;
+      console.log(`[Worker Engine] Stopping browser capturer & synthesizing test for session: ${sessionId}`);
+
+      const capturer = activeCapturers.get(sessionId);
+      if (capturer) {
+        try {
+          await capturer.stop();
+          activeCapturers.delete(sessionId);
+        } catch (stopErr: any) {
+          console.error(`[Worker Engine] Error stopping capturer:`, stopErr.message);
+        }
+      }
+
+      // Run AI Test Synthesizer
+      try {
+        const synthesizer = new AISynthesizer(pool);
+        const result = await synthesizer.synthesize(sessionId);
+
+        // Notify dashboard of completion
+        await pubRedis.publish(
+          'recording_events',
+          JSON.stringify({
+            event: 'recording_synthesized',
+            sessionId,
+            specCode: result.specCode,
+            specUrl: result.specUrl,
+            status: result.synthesizerStatus,
+            warning: result.synthesizerWarning,
+            tags: result.tags,
+            inferredAssertions: result.inferredAssertions,
+          })
+        );
+      } catch (synthErr: any) {
+        console.error(`[Worker Engine] Error during AI test synthesis:`, synthErr.message);
+      }
+    }
+  } catch (err: any) {
+    console.error('[Worker Engine] Error parsing recording_events message:', err.message);
+  }
+});
+
+console.log('[VeriShip Worker Engine] BullMQ Worker & Interactive Screen Capturer started and waiting for QA jobs...');

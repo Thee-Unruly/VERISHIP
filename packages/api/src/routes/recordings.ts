@@ -323,6 +323,39 @@ export async function recordingRoutes(fastify: FastifyInstance) {
     });
   });
 
+  // 7b. Real-time SSE Stream for Live Step Telemetry
+  fastify.get('/api/recordings/:id/stream', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = req.params;
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const redisSub = new Redis({ host: redisHost, port: redisPort });
+    await redisSub.subscribe('recording_events');
+
+    const onMessage = (channel: string, message: string) => {
+      if (channel === 'recording_events') {
+        try {
+          const data = JSON.parse(message);
+          if (data.sessionId === id) {
+            reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+          }
+        } catch (e) {}
+      }
+    };
+
+    redisSub.on('message', onMessage);
+
+    req.raw.on('close', () => {
+      redisSub.unsubscribe('recording_events').catch(() => {});
+      redisSub.quit().catch(() => {});
+    });
+  });
+
   // 8. Human Catalog Browse for Reusable Flow Blocks
   fastify.get('/api/recordings/flows', async (req: FastifyRequest<{
     Querystring: {
