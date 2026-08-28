@@ -28,6 +28,14 @@ import {
   BookmarkPlus,
   HelpCircle,
   Radio,
+  Terminal,
+  Activity,
+  ArrowRight,
+  Laptop,
+  Flame,
+  FileCode,
+  Compass,
+  Cpu,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useProjects } from "@/context/ProjectsContext";
@@ -35,7 +43,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -105,7 +112,6 @@ export default function RecordStudio() {
   // Output / Synthesized state
   const [synthesizedSpec, setSynthesizedSpec] = useState<string | null>(null);
   const [synthesizerStatus, setSynthesizerStatus] = useState<string>("pending");
-  const [synthesizerWarning, setSynthesizerWarning] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Suggested Assertions
@@ -181,6 +187,14 @@ export default function RecordStudio() {
     fetchFlows();
   }, [flowSearch]);
 
+  // Quick Preset Selector
+  const applyPreset = (name: string, url: string, tags: string[]) => {
+    setSessionName(name);
+    setTargetUrl(url);
+    setCustomTags(tags);
+    toast.info(`Applied recipe: ${name}`);
+  };
+
   // Start Interactive Recording Session
   const handleStartRecording = async () => {
     if (!targetUrl.trim()) {
@@ -217,7 +231,7 @@ export default function RecordStudio() {
       setSessionId(data.sessionId);
       toast.success("Interactive Recording Session started. Browser is active!");
 
-      // Simulate initial navigation step
+      // Initial navigation step
       const initialStep: RecordedStepItem = {
         id: `step_init_${Date.now()}`,
         stepNumber: 1,
@@ -344,14 +358,18 @@ export default function RecordStudio() {
           accepted: true,
         }));
 
-      setSuggestedAssertions(inferred.length > 0 ? inferred : [
-        {
-          stepNumber: steps.length,
-          text: "Verify page state and action completion",
-          confidence: 0.95,
-          accepted: true,
-        }
-      ]);
+      setSuggestedAssertions(
+        inferred.length > 0
+          ? inferred
+          : [
+              {
+                stepNumber: steps.length,
+                text: "Verify page state and action completion",
+                confidence: 0.95,
+                accepted: true,
+              },
+            ]
+      );
 
       toast.dismiss();
       toast.success("Test synthesis complete! Production Playwright test generated.");
@@ -420,177 +438,206 @@ export default function RecordStudio() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Studio Title & Controls Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-border/40 pb-5">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="h-8 w-8 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shadow-sm">
-                <Video className="h-4 w-4" />
+      <div className="space-y-4">
+        {/* Studio Top Control Header */}
+        <div className="bg-card/70 border border-border/50 rounded-xl p-4 shadow-sm backdrop-blur-md">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-red-500/20 to-rose-500/20 border border-red-500/30 flex items-center justify-center text-red-400 shadow-inner">
+                <Video className="h-5 w-5" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight">Interactive Record Studio</h1>
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 text-xs">
-                CDP Event Stream
-              </Badge>
-              {isRecording && (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold animate-pulse">
-                  <span className="h-2 w-2 rounded-full bg-red-500" />
-                  REC {formatTimer(recordingSeconds)}
-                </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold tracking-tight">Interactive Screen Studio</h1>
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold">
+                    CDP Tracing Active
+                  </Badge>
+                  {isRecording && (
+                    <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/40 text-red-400 text-xs font-bold animate-pulse">
+                      <span className="h-2 w-2 rounded-full bg-red-500" />
+                      REC {formatTimer(recordingSeconds)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Capture enterprise golden paths (SSO/2FA/AgilePM) once. Synthesizes resilient Playwright tests with automatic PII masking.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {!isRecording ? (
+                <Button
+                  onClick={handleStartRecording}
+                  className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold shadow-md shadow-red-500/20"
+                >
+                  <Play className="h-4 w-4 mr-2" /> Start Recording
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleStopAndSynthesize}
+                  disabled={isProcessing}
+                  variant="destructive"
+                  className="font-semibold shadow-md shadow-red-600/30 animate-pulse"
+                >
+                  <Square className="h-4 w-4 mr-2" /> Stop & Synthesize Spec
+                </Button>
+              )}
+
+              {synthesizedSpec && (
+                <Button
+                  onClick={handleSaveToTestCase}
+                  disabled={savingTestCase || Boolean(savedTestCaseId)}
+                  variant="outline"
+                  className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 font-medium"
+                >
+                  {savedTestCaseId ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 mr-1.5 text-emerald-400" /> Saved #{savedTestCaseId.slice(0, 8)}
+                    </>
+                  ) : (
+                    <>
+                      <BookmarkPlus className="h-4 w-4 mr-1.5 text-emerald-400" /> Save as Test Case & Memory
+                    </>
+                  )}
+                </Button>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">
-              Demonstrate complex SSO/2FA flows once in an interactive browser. Veriship captures discrete steps, masks credentials, synthesizes resilient Playwright tests, and indexes tagged flow memory.
-            </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {!isRecording ? (
-              <Button
-                onClick={handleStartRecording}
-                className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-medium shadow-md shadow-red-500/20"
+          {/* Quick Flow Presets Bar */}
+          {!isRecording && steps.length === 0 && (
+            <div className="mt-3 pt-3 border-t border-border/30 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground font-semibold flex items-center gap-1">
+                <Flame className="h-3.5 w-3.5 text-amber-400" /> Golden Path Recipes:
+              </span>
+              <button
+                onClick={() =>
+                  applyPreset("AgilePM Task Creation & Submit Flow", "https://demo.playwright.dev/todomvc", ["agilepm", "task-creation", "auth"])
+                }
+                className="px-2.5 py-1 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all border border-border/40 flex items-center gap-1.5"
               >
-                <Play className="h-4 w-4 mr-2" /> Start Recording
-              </Button>
-            ) : (
-              <Button
-                onClick={handleStopAndSynthesize}
-                disabled={isProcessing}
-                variant="destructive"
-                className="font-medium shadow-md shadow-red-600/30 animate-pulse"
+                <FileCode className="h-3 w-3 text-primary" /> AgilePM Task Creation
+              </button>
+              <button
+                onClick={() =>
+                  applyPreset("Enterprise SSO & 2FA Auth Golden Path", "https://demo.playwright.dev/todomvc", ["auth", "sso", "2fa"])
+                }
+                className="px-2.5 py-1 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all border border-border/40 flex items-center gap-1.5"
               >
-                <Square className="h-4 w-4 mr-2" /> Stop & Synthesize Spec
-              </Button>
-            )}
+                <ShieldCheck className="h-3 w-3 text-emerald-400" /> Enterprise SSO & 2FA
+              </button>
+              <button
+                onClick={() =>
+                  applyPreset("E-Commerce Checkout & Payment Verification", "https://demo.playwright.dev/todomvc", ["checkout", "cart", "payment"])
+                }
+                className="px-2.5 py-1 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all border border-border/40 flex items-center gap-1.5"
+              >
+                <Zap className="h-3 w-3 text-amber-400" /> Checkout & Payment
+              </button>
+            </div>
+          )}
 
-            {synthesizedSpec && (
-              <Button
-                onClick={handleSaveToTestCase}
-                disabled={savingTestCase || Boolean(savedTestCaseId)}
-                variant="outline"
-                className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+          {/* Target URL & Session Configuration Form */}
+          <div className="mt-3 pt-3 border-t border-border/30 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div className="md:col-span-4 space-y-1">
+              <Label htmlFor="sessionName" className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Flow Name
+              </Label>
+              <Input
+                id="sessionName"
+                value={sessionName}
+                onChange={(e) => setSessionName(e.target.value)}
+                disabled={isRecording}
+                className="h-8 bg-background/50 text-xs font-medium"
+              />
+            </div>
+
+            <div className="md:col-span-5 space-y-1">
+              <Label htmlFor="targetUrl" className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Target Application URL
+              </Label>
+              <div className="relative">
+                <Globe className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                <Input
+                  id="targetUrl"
+                  value={targetUrl}
+                  onChange={(e) => setTargetUrl(e.target.value)}
+                  disabled={isRecording}
+                  className="pl-8 h-8 bg-background/50 font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="md:col-span-3 space-y-1">
+              <Label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Browser Context
+              </Label>
+              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md border border-border/40 h-8">
+                <button
+                  onClick={() => setAuthMode("standard")}
+                  className={`flex-1 h-full text-[11px] rounded text-center transition-all ${
+                    authMode === "standard" ? "bg-primary text-primary-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Standard
+                </button>
+                <button
+                  onClick={() => setAuthMode("clean")}
+                  className={`flex-1 h-full text-[11px] rounded text-center transition-all ${
+                    authMode === "clean" ? "bg-primary text-primary-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Clean
+                </button>
+                <button
+                  onClick={() => setAuthMode("incognito")}
+                  className={`flex-1 h-full text-[11px] rounded text-center transition-all ${
+                    authMode === "incognito" ? "bg-primary text-primary-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Incognito
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tag Registry Bar */}
+          <div className="mt-3 pt-2 border-t border-border/20 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+              <Tag className="h-3 w-3" /> Step Tags:
+            </span>
+            {customTags.map((tag) => (
+              <Badge
+                key={tag}
+                variant="secondary"
+                className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 cursor-pointer text-[10px] px-1.5 py-0"
+                onClick={() => handleRemoveTag(tag)}
               >
-                {savedTestCaseId ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-400" /> Saved #{savedTestCaseId.slice(0, 8)}
-                  </>
-                ) : (
-                  <>
-                    <BookmarkPlus className="h-4 w-4 mr-2 text-emerald-400" /> Save as Test Case & Memory
-                  </>
-                )}
-              </Button>
-            )}
+                #{tag} &times;
+              </Badge>
+            ))}
+            <Input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
+              placeholder="+ Add tag"
+              className="h-5 text-[10px] w-24 bg-transparent border-dashed px-1.5"
+            />
           </div>
         </div>
 
-        {/* Target URL & Session Configuration Card */}
-        <Card className="border-border/40 bg-card/60 backdrop-blur-sm">
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-              <div className="md:col-span-4 space-y-1.5">
-                <Label htmlFor="sessionName" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Flow Name
-                </Label>
-                <Input
-                  id="sessionName"
-                  value={sessionName}
-                  onChange={(e) => setSessionName(e.target.value)}
-                  disabled={isRecording}
-                  placeholder="e.g. AgilePM Task Creation & Submit Flow"
-                  className="bg-background/50 text-sm"
-                />
-              </div>
-
-              <div className="md:col-span-5 space-y-1.5">
-                <Label htmlFor="targetUrl" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Target Application URL
-                </Label>
-                <div className="relative">
-                  <Globe className="h-4 w-4 absolute left-3 top-2.5 text-muted-foreground" />
-                  <Input
-                    id="targetUrl"
-                    value={targetUrl}
-                    onChange={(e) => setTargetUrl(e.target.value)}
-                    disabled={isRecording}
-                    placeholder="https://..."
-                    className="pl-9 bg-background/50 font-mono text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="md:col-span-3 space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Auth Mode
-                </Label>
-                <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-md border border-border/40">
-                  <button
-                    onClick={() => setAuthMode("standard")}
-                    className={`flex-1 py-1 text-xs rounded text-center transition-all ${
-                      authMode === "standard" ? "bg-primary text-primary-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Standard
-                  </button>
-                  <button
-                    onClick={() => setAuthMode("clean")}
-                    className={`flex-1 py-1 text-xs rounded text-center transition-all ${
-                      authMode === "clean" ? "bg-primary text-primary-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Clean
-                  </button>
-                  <button
-                    onClick={() => setAuthMode("incognito")}
-                    className={`flex-1 py-1 text-xs rounded text-center transition-all ${
-                      authMode === "incognito" ? "bg-primary text-primary-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Incognito
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Tag Registry Bar */}
-            <div className="mt-4 pt-3 border-t border-border/30 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                <Tag className="h-3 w-3" /> Step & Flow Tags:
-              </span>
-              {customTags.map((tag) => (
-                <Badge
-                  key={tag}
-                  variant="secondary"
-                  className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 cursor-pointer text-xs"
-                  onClick={() => handleRemoveTag(tag)}
-                >
-                  #{tag} &times;
-                </Badge>
-              ))}
-              <div className="flex items-center gap-1">
-                <Input
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
-                  placeholder="+ Add tag (Enter)"
-                  className="h-6 text-xs w-32 bg-transparent border-dashed"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Main Two-Column Studio Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Studio Dual Workspace */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left Column: Live Step Timeline */}
-          <div className="lg:col-span-6 space-y-4">
-            <Card className="border-border/40 bg-card/60 backdrop-blur-sm">
-              <CardHeader className="py-4 px-5 border-b border-border/40 flex flex-row items-center justify-between">
+          <div className="lg:col-span-6 flex flex-col">
+            <Card className="border-border/50 bg-card/70 backdrop-blur-md flex-1 flex flex-col shadow-sm">
+              <CardHeader className="py-3 px-4 border-b border-border/40 flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Radio className="h-4 w-4 text-primary" /> Live Step Timeline
                   </CardTitle>
-                  <CardDescription className="text-xs">
+                  <CardDescription className="text-[11px]">
                     {steps.length} discrete interaction{steps.length !== 1 ? "s" : ""} captured with PII redaction.
                   </CardDescription>
                 </div>
@@ -600,99 +647,114 @@ export default function RecordStudio() {
                     onClick={() => setCheckpointModalOpen(true)}
                     size="sm"
                     variant="outline"
-                    className="h-8 text-xs border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                    className="h-7 text-xs border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
                   >
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Assertion Checkpoint
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Assertion
                   </Button>
                 )}
               </CardHeader>
 
-              <CardContent className="p-4 space-y-3 max-h-[600px] overflow-y-auto">
+              <CardContent className="p-4 flex-1 flex flex-col justify-between space-y-3 min-h-[480px]">
                 {steps.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground space-y-3">
-                    <div className="h-12 w-12 rounded-full bg-muted/30 mx-auto flex items-center justify-center text-muted-foreground/60">
-                      <Video className="h-6 w-6" />
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3 border border-dashed border-border/50 rounded-lg bg-muted/10 my-auto">
+                    <div className="h-12 w-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
+                      <Compass className="h-6 w-6" />
                     </div>
-                    <p className="text-sm font-medium">Ready to record browser interactions</p>
-                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                      Click "Start Recording" above to spin up an interactive session. Clicks, typing, navigations, and dialogs will populate here automatically.
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-foreground">Interactive Screen Capturer Ready</p>
+                      <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                        Click <span className="font-semibold text-red-400">"Start Recording"</span> above to spin up a live browser session. Clicks, typing, navigations, toasts, and dialogs will stream here in real time.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex flex-wrap gap-2 justify-center">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted border border-border/40 text-muted-foreground flex items-center gap-1">
+                        <Lock className="h-3 w-3 text-amber-400" /> Automatic PII Masking
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted border border-border/40 text-muted-foreground flex items-center gap-1">
+                        <Cpu className="h-3 w-3 text-primary" /> AST Validated Code
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted border border-border/40 text-muted-foreground flex items-center gap-1">
+                        <Database className="h-3 w-3 text-emerald-400" /> Reusable Flow Memory
+                      </span>
+                    </div>
                   </div>
                 ) : (
-                  steps.map((step, idx) => (
-                    <div
-                      key={step.id}
-                      className="p-3 rounded-lg border border-border/40 bg-background/40 hover:bg-background/70 transition-all flex items-start gap-3 text-xs"
-                    >
-                      <div className="h-6 w-6 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center shrink-0 mt-0.5">
-                        {step.stepNumber}
-                      </div>
+                  <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                    {steps.map((step) => (
+                      <div
+                        key={step.id}
+                        className="p-2.5 rounded-lg border border-border/40 bg-background/50 hover:bg-background/80 transition-all flex items-start gap-2.5 text-xs shadow-sm"
+                      >
+                        <div className="h-5 w-5 rounded-full bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
+                          {step.stepNumber}
+                        </div>
 
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] uppercase font-bold px-1.5 py-0 ${
-                                step.actionType === "click"
-                                  ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
-                                  : step.actionType === "fill"
-                                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                                  : step.actionType === "navigate"
-                                  ? "border-purple-500/30 bg-purple-500/10 text-purple-400"
-                                  : "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                              }`}
-                            >
-                              {step.actionType}
-                            </Badge>
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className={`text-[9px] uppercase font-bold px-1.5 py-0 ${
+                                  step.actionType === "click"
+                                    ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                                    : step.actionType === "fill"
+                                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                    : step.actionType === "navigate"
+                                    ? "border-purple-500/30 bg-purple-500/10 text-purple-400"
+                                    : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                                }`}
+                              >
+                                {step.actionType}
+                              </Badge>
 
-                            <Badge variant="secondary" className="text-[10px] text-muted-foreground">
-                              {step.systemCategory}
-                            </Badge>
+                              <Badge variant="secondary" className="text-[9px] text-muted-foreground px-1 py-0">
+                                {step.systemCategory}
+                              </Badge>
+                            </div>
+
+                            {step.isSensitive && (
+                              <span className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/30">
+                                <Lock className="h-2.5 w-2.5" /> Masked
+                              </span>
+                            )}
                           </div>
 
-                          {step.isSensitive && (
-                            <span className="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
-                              <Lock className="h-3 w-3" /> Masked
-                            </span>
+                          <div className="font-mono text-foreground text-[11px] bg-muted/40 p-1 rounded truncate">
+                            {step.targetSelector}
+                          </div>
+
+                          {step.inputValue && (
+                            <div className="flex items-center gap-1 text-muted-foreground text-[11px]">
+                              <span className="font-semibold text-muted-foreground/80">Value:</span>
+                              <span className={`font-mono ${step.isSensitive ? "text-amber-400 font-bold" : "text-foreground"}`}>
+                                {step.inputValue}
+                              </span>
+                            </div>
+                          )}
+
+                          {step.isAssertion && step.assertionRule && (
+                            <div className="flex items-center gap-1 text-amber-400 text-[11px] bg-amber-500/10 p-1 rounded border border-amber-500/20">
+                              <CheckCircle2 className="h-3 w-3" /> Assert: {step.assertionRule.expected || "Element visible"}
+                            </div>
                           )}
                         </div>
-
-                        <div className="font-mono text-foreground/90 truncate text-[11px] bg-muted/30 p-1.5 rounded">
-                          {step.targetSelector}
-                        </div>
-
-                        {step.inputValue && (
-                          <div className="flex items-center gap-1 text-muted-foreground text-[11px]">
-                            <span className="font-semibold text-muted-foreground/80">Value:</span>
-                            <span className={`font-mono ${step.isSensitive ? "text-amber-400 font-bold" : "text-foreground"}`}>
-                              {step.inputValue}
-                            </span>
-                          </div>
-                        )}
-
-                        {step.isAssertion && step.assertionRule && (
-                          <div className="flex items-center gap-1 text-amber-400 text-[11px] bg-amber-500/10 p-1 rounded border border-amber-500/20">
-                            <CheckCircle2 className="h-3 w-3" /> Assert: {step.assertionRule.expected || "Element visible"}
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
 
-                {/* Quick Simulation Bar for Interactive Walkthrough */}
+                {/* Quick Simulation Bar for Interactive Testing */}
                 {isRecording && (
-                  <div className="mt-4 pt-3 border-t border-border/40 flex flex-wrap gap-1.5 items-center justify-between text-xs text-muted-foreground">
-                    <span>Simulate Action:</span>
-                    <div className="flex gap-1.5">
+                  <div className="mt-2 pt-2 border-t border-border/40 flex flex-wrap gap-1.5 items-center justify-between text-xs text-muted-foreground">
+                    <span className="text-[11px] font-medium">Quick Step Injector:</span>
+                    <div className="flex gap-1">
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() =>
                           handleAddSimulatedStep("click", "page.getByRole('button', { name: 'New Task' })", undefined, false, "modal_flow")
                         }
-                        className="h-6 text-[11px] px-2 bg-muted/40 hover:bg-muted"
+                        className="h-6 text-[10px] px-1.5 bg-muted/40 hover:bg-muted"
                       >
                         + Click 'New Task'
                       </Button>
@@ -702,7 +764,7 @@ export default function RecordStudio() {
                         onClick={() =>
                           handleAddSimulatedStep("fill", "page.getByLabel('Task Title')", "Implement Auth SSO Validation", false, "form_fill")
                         }
-                        className="h-6 text-[11px] px-2 bg-muted/40 hover:bg-muted"
+                        className="h-6 text-[10px] px-1.5 bg-muted/40 hover:bg-muted"
                       >
                         + Fill Title
                       </Button>
@@ -712,9 +774,9 @@ export default function RecordStudio() {
                         onClick={() =>
                           handleAddSimulatedStep("fill", "page.getByLabel('Password')", "SuperSecretPassword123!", true, "auth")
                         }
-                        className="h-6 text-[11px] px-2 bg-muted/40 hover:bg-muted text-amber-400"
+                        className="h-6 text-[10px] px-1.5 bg-muted/40 hover:bg-muted text-amber-400"
                       >
-                        + Fill Password (Redacted)
+                        + Fill Password
                       </Button>
                       <Button
                         size="sm"
@@ -722,7 +784,7 @@ export default function RecordStudio() {
                         onClick={() =>
                           handleAddSimulatedStep("click", "page.getByRole('button', { name: 'Save' })", undefined, false, "action_trigger")
                         }
-                        className="h-6 text-[11px] px-2 bg-muted/40 hover:bg-muted"
+                        className="h-6 text-[10px] px-1.5 bg-muted/40 hover:bg-muted"
                       >
                         + Submit
                       </Button>
@@ -733,36 +795,36 @@ export default function RecordStudio() {
             </Card>
           </div>
 
-          {/* Right Column: Synthesized Playwright Spec & Memory Recipe */}
-          <div className="lg:col-span-6 space-y-4">
-            <Card className="border-border/40 bg-card/60 backdrop-blur-sm">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <CardHeader className="py-3 px-4 border-b border-border/40 flex flex-row items-center justify-between">
-                  <TabsList className="bg-muted/40 border border-border/40">
-                    <TabsTrigger value="spec" className="text-xs gap-1.5">
+          {/* Right Column: Synthesized Spec & Memory Studio */}
+          <div className="lg:col-span-6 flex flex-col">
+            <Card className="border-border/50 bg-card/70 backdrop-blur-md flex-1 flex flex-col shadow-sm">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+                <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
+                  <TabsList className="bg-muted/40 border border-border/40 h-8">
+                    <TabsTrigger value="spec" className="text-xs gap-1.5 h-7">
                       <Sparkles className="h-3.5 w-3.5 text-primary" /> Synthesized Spec (.spec.ts)
                     </TabsTrigger>
-                    <TabsTrigger value="fixtures" className="text-xs gap-1.5">
+                    <TabsTrigger value="fixtures" className="text-xs gap-1.5 h-7">
                       <Database className="h-3.5 w-3.5 text-emerald-400" /> Flow Memory & Fixtures
                     </TabsTrigger>
-                    <TabsTrigger value="catalog" className="text-xs gap-1.5">
+                    <TabsTrigger value="catalog" className="text-xs gap-1.5 h-7">
                       <Layers className="h-3.5 w-3.5 text-purple-400" /> Reusable Flow Catalog
                     </TabsTrigger>
                   </TabsList>
 
                   {synthesizedSpec && activeTab === "spec" && (
-                    <Button onClick={handleCopyCode} size="sm" variant="ghost" className="h-7 text-xs px-2">
-                      {copied ? <Check className="h-3.5 w-3.5 text-emerald-400 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                    <Button onClick={handleCopyCode} size="sm" variant="ghost" className="h-6 text-xs px-2">
+                      {copied ? <Check className="h-3 w-3 text-emerald-400 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
                       {copied ? "Copied" : "Copy"}
                     </Button>
                   )}
                 </CardHeader>
 
                 {/* Tab 1: Synthesized Spec */}
-                <TabsContent value="spec" className="m-0 p-4">
+                <TabsContent value="spec" className="m-0 p-4 flex-1 flex flex-col justify-between">
                   {synthesizedSpec ? (
                     <div className="space-y-3">
-                      {/* Quality & Compilation Status Banner */}
+                      {/* Quality Banner */}
                       <div className="flex items-center justify-between p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs">
                         <span className="flex items-center gap-1.5 font-semibold">
                           <CheckCircle2 className="h-4 w-4" /> TypeScript Compilation: PASSED
@@ -772,20 +834,22 @@ export default function RecordStudio() {
                         </Badge>
                       </div>
 
-                      {/* Code Display */}
-                      <div className="rounded-lg border border-border/50 bg-[#0d1117] p-4 text-xs font-mono overflow-x-auto max-h-[500px] text-gray-200">
+                      {/* Code Viewer */}
+                      <div className="rounded-lg border border-border/50 bg-[#0d1117] p-3 text-xs font-mono overflow-x-auto max-h-[420px] text-gray-200 shadow-inner">
                         <pre>{synthesizedSpec}</pre>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-16 text-muted-foreground space-y-3">
-                      <div className="h-12 w-12 rounded-full bg-muted/30 mx-auto flex items-center justify-center text-muted-foreground/60">
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3 border border-dashed border-border/50 rounded-lg bg-muted/10 my-auto">
+                      <div className="h-12 w-12 rounded-2xl bg-muted/30 border border-border/50 mx-auto flex items-center justify-center text-muted-foreground/60 shadow-inner">
                         <Sparkles className="h-6 w-6 text-primary" />
                       </div>
-                      <p className="text-sm font-medium">No Synthesized Test Script Yet</p>
-                      <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                        Record your browser interactions on the left, then click "Stop & Synthesize" to generate production-ready Playwright TypeScript code.
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-foreground">Awaiting Test Synthesis</p>
+                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                          Record steps on the left, then click <span className="font-semibold text-primary">"Stop & Synthesize"</span> to compile an AST-validated Playwright TypeScript test file.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </TabsContent>
@@ -793,8 +857,8 @@ export default function RecordStudio() {
                 {/* Tab 2: Flow Memory & Fixtures */}
                 <TabsContent value="fixtures" className="m-0 p-4 space-y-4">
                   <div className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Parameterized Fixtures & Test Data ({steps.filter((s) => s.actionType === "fill").length} inputs)
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Terminal className="h-3.5 w-3.5 text-primary" /> Parameterized Fixtures & Test Data
                     </h3>
                     <div className="p-3 rounded-lg border border-border/40 bg-background/50 font-mono text-xs text-foreground space-y-1">
                       <div>const testData = &#123;</div>
@@ -802,7 +866,7 @@ export default function RecordStudio() {
                       {steps
                         .filter((s) => s.actionType === "fill")
                         .map((s, idx) => (
-                          <div key={s.id} className={`pl-4 ${s.isSensitive ? "text-amber-400" : "text-emerald-400"}`}>
+                          <div key={s.id} className={`pl-4 ${s.isSensitive ? "text-amber-400 font-bold" : "text-emerald-400"}`}>
                             field_{idx + 1}: {s.isSensitive ? 'process.env.TEST_PASSWORD || "[REDACTED]"' : JSON.stringify(s.inputValue || '')},
                           </div>
                         ))}
@@ -814,16 +878,18 @@ export default function RecordStudio() {
                   </div>
 
                   <div className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Indexed Selector Mapping (Ground-Truth Memory)
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Database className="h-3.5 w-3.5 text-emerald-400" /> Indexed Selector Mapping (Ground-Truth Memory)
                     </h3>
                     <div className="space-y-1.5 text-xs max-h-48 overflow-y-auto">
                       {steps.length === 0 ? (
-                        <p className="text-muted-foreground text-xs p-2">No selectors captured yet.</p>
+                        <p className="text-muted-foreground text-xs p-3 bg-muted/20 rounded border border-border/30">
+                          No selectors captured yet. Steps will automatically map locators here.
+                        </p>
                       ) : (
                         Array.from(new Set(steps.map((s) => s.targetSelector))).map((sel, idx) => (
                           <div key={idx} className="flex justify-between p-2 rounded bg-background/40 border border-border/40 font-mono">
-                            <span className="text-muted-foreground">element_{idx + 1}:</span>
+                            <span className="text-muted-foreground font-semibold">element_{idx + 1}:</span>
                             <span className="text-primary font-semibold truncate ml-2">{sel}</span>
                           </div>
                         ))
@@ -835,25 +901,25 @@ export default function RecordStudio() {
                 {/* Tab 3: Reusable Flow Catalog */}
                 <TabsContent value="catalog" className="m-0 p-4 space-y-3">
                   <div className="relative">
-                    <Search className="h-4 w-4 absolute left-3 top-2.5 text-muted-foreground" />
+                    <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
                     <Input
                       placeholder="Search reusable flow blocks by tag or name..."
                       value={flowSearch}
                       onChange={(e) => setFlowSearch(e.target.value)}
-                      className="pl-9 h-8 text-xs bg-background/50"
+                      className="pl-8 h-8 text-xs bg-background/50"
                     />
                   </div>
 
-                  <div className="space-y-2 max-h-[460px] overflow-y-auto">
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                     {flows.length === 0 ? (
-                      <p className="text-center text-xs text-muted-foreground py-8">
+                      <p className="text-center text-xs text-muted-foreground py-10">
                         No saved flow blocks matching query. Save a recording to index it into Memory.
                       </p>
                     ) : (
                       flows.map((flow) => (
                         <div
                           key={flow.id}
-                          className="p-3 rounded-lg border border-border/40 bg-background/40 hover:bg-background/60 transition-all text-xs space-y-2"
+                          className="p-3 rounded-lg border border-border/40 bg-background/40 hover:bg-background/70 transition-all text-xs space-y-2"
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-semibold text-foreground">{flow.name}</span>
