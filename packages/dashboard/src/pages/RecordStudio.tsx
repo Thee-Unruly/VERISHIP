@@ -326,22 +326,31 @@ export default function RecordStudio() {
     try {
       toast.loading("Finalizing recording & synthesizing Playwright TypeScript test...");
 
-      // Stop session
+      // Stop session on backend
       await fetch(`/api/recordings/${sessionId}/stop`, { method: "POST" });
 
-      // Generate Synthesized Spec
-      const fallbackSpec = generateDemoSpec(sessionName, targetUrl, steps, customTags);
-      setSynthesizedSpec(fallbackSpec);
+      // Build dynamic Playwright test spec from the actual captured steps
+      const dynamicSpec = generateDynamicSpec(sessionName, targetUrl, steps, customTags);
+      setSynthesizedSpec(dynamicSpec);
       setSynthesizerStatus("success");
 
-      // Suggested inferred assertion
-      setSuggestedAssertions([
+      // Extract inferred assertions from assertion steps or toasts
+      const inferred = steps
+        .filter((s) => s.isAssertion || s.actionType === "assert")
+        .map((s) => ({
+          stepNumber: s.stepNumber,
+          text: `Verify '${s.assertionRule?.expected || "element"}' condition is satisfied`,
+          confidence: s.assertionRule?.confidence || 0.95,
+          accepted: true,
+        }));
+
+      setSuggestedAssertions(inferred.length > 0 ? inferred : [
         {
           stepNumber: steps.length,
-          text: "Verify 'Task created successfully' toast notification is visible",
-          confidence: 0.96,
+          text: "Verify page state and action completion",
+          confidence: 0.95,
           accepted: true,
-        },
+        }
       ]);
 
       toast.dismiss();
@@ -785,13 +794,21 @@ export default function RecordStudio() {
                 <TabsContent value="fixtures" className="m-0 p-4 space-y-4">
                   <div className="space-y-2">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Parameterized Fixtures & Test Data
+                      Parameterized Fixtures & Test Data ({steps.filter((s) => s.actionType === "fill").length} inputs)
                     </h3>
                     <div className="p-3 rounded-lg border border-border/40 bg-background/50 font-mono text-xs text-foreground space-y-1">
                       <div>const testData = &#123;</div>
-                      <div className="pl-4 text-emerald-400">taskTitle: 'Implement Auth SSO Validation',</div>
-                      <div className="pl-4 text-amber-400">password: process.env.TEST_PASSWORD || '*****',</div>
                       <div className="pl-4 text-blue-400">targetUrl: '{targetUrl}',</div>
+                      {steps
+                        .filter((s) => s.actionType === "fill")
+                        .map((s, idx) => (
+                          <div key={s.id} className={`pl-4 ${s.isSensitive ? "text-amber-400" : "text-emerald-400"}`}>
+                            field_{idx + 1}: {s.isSensitive ? 'process.env.TEST_PASSWORD || "[REDACTED]"' : JSON.stringify(s.inputValue || '')},
+                          </div>
+                        ))}
+                      {steps.filter((s) => s.actionType === "fill").length === 0 && (
+                        <div className="pl-4 text-muted-foreground">// No input fills recorded yet</div>
+                      )}
                       <div>&#125;;</div>
                     </div>
                   </div>
@@ -800,19 +817,17 @@ export default function RecordStudio() {
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Indexed Selector Mapping (Ground-Truth Memory)
                     </h3>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between p-2 rounded bg-background/40 border border-border/40 font-mono">
-                        <span className="text-muted-foreground">newTaskButton:</span>
-                        <span className="text-primary font-semibold">page.getByRole('button', &#123; name: 'New Task' &#125;)</span>
-                      </div>
-                      <div className="flex justify-between p-2 rounded bg-background/40 border border-border/40 font-mono">
-                        <span className="text-muted-foreground">taskTitleInput:</span>
-                        <span className="text-primary font-semibold">page.getByLabel('Task Title')</span>
-                      </div>
-                      <div className="flex justify-between p-2 rounded bg-background/40 border border-border/40 font-mono">
-                        <span className="text-muted-foreground">saveButton:</span>
-                        <span className="text-primary font-semibold">page.getByRole('button', &#123; name: 'Save' &#125;)</span>
-                      </div>
+                    <div className="space-y-1.5 text-xs max-h-48 overflow-y-auto">
+                      {steps.length === 0 ? (
+                        <p className="text-muted-foreground text-xs p-2">No selectors captured yet.</p>
+                      ) : (
+                        Array.from(new Set(steps.map((s) => s.targetSelector))).map((sel, idx) => (
+                          <div key={idx} className="flex justify-between p-2 rounded bg-background/40 border border-border/40 font-mono">
+                            <span className="text-muted-foreground">element_{idx + 1}:</span>
+                            <span className="text-primary font-semibold truncate ml-2">{sel}</span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </TabsContent>
@@ -914,7 +929,7 @@ export default function RecordStudio() {
   );
 }
 
-function generateDemoSpec(
+function generateDynamicSpec(
   sessionName: string,
   targetUrl: string,
   steps: RecordedStepItem[],
@@ -929,34 +944,47 @@ function generateDemoSpec(
     ` * Tags: ${tags.map((t) => `#${t}`).join(' ')}`,
     ` */`,
     `test.describe('${sessionName}', () => {`,
-    `  // Parameterized Test Fixtures`,
+    `  // Parameterized Test Fixtures dynamically generated from session`,
     `  const testData = {`,
-    `    taskTitle: 'Implement Auth SSO Validation',`,
-    `    password: process.env.TEST_PASSWORD || 'SecretPassword123!',`,
-    `  };`,
-    ``,
-    `  test('should execute golden path flow with resilience', async ({ page }) => {`,
-    `    // 1. Initial Navigation`,
-    `    await page.goto('${targetUrl}', { waitUntil: 'domcontentloaded' });`,
-    ``,
+    `    targetUrl: '${targetUrl}',`,
   ];
 
+  steps
+    .filter((s) => s.actionType === 'fill')
+    .forEach((s, idx) => {
+      if (s.isSensitive) {
+        codeLines.push(`    field_${idx + 1}: process.env.TEST_PASSWORD || 'SecretPassword123!',`);
+      } else {
+        codeLines.push(`    field_${idx + 1}: ${JSON.stringify(s.inputValue || '')},`);
+      }
+    });
+
+  codeLines.push(`  };`);
+  codeLines.push(``);
+  codeLines.push(`  test('should execute golden path flow with resilience', async ({ page }) => {`);
+  codeLines.push(`    // 1. Initial Navigation`);
+  codeLines.push(`    await page.goto(testData.targetUrl, { waitUntil: 'domcontentloaded' });`);
+  codeLines.push(``);
+
+  let fillIdx = 0;
   for (const step of steps) {
     if (step.actionType === 'navigate') continue;
-    codeLines.push(`    // Step ${step.stepNumber}: [${step.systemCategory}] ${step.actionType.toUpperCase()}`);
+    codeLines.push(`    // Step ${step.stepNumber}: [${step.systemCategory}] ${step.actionType.toUpperCase()} on ${step.targetSelector}`);
     if (step.actionType === 'click') {
       codeLines.push(`    await ${step.targetSelector}.click();`);
     } else if (step.actionType === 'fill') {
-      const val = step.isSensitive ? 'testData.password' : JSON.stringify(step.inputValue || '');
-      codeLines.push(`    await ${step.targetSelector}.fill(${val});`);
-    } else if (step.isAssertion) {
-      codeLines.push(`    await expect(${step.targetSelector}).toBeVisible();`);
+      fillIdx++;
+      codeLines.push(`    await ${step.targetSelector}.fill(testData.field_${fillIdx});`);
+    } else if (step.isAssertion && step.assertionRule) {
+      if (step.assertionRule.expected) {
+        codeLines.push(`    await expect(${step.targetSelector}).toContainText('${step.assertionRule.expected}');`);
+      } else {
+        codeLines.push(`    await expect(${step.targetSelector}).toBeVisible();`);
+      }
     }
     codeLines.push(``);
   }
 
-  codeLines.push(`    // Inferred Toast / Success Checkpoint`);
-  codeLines.push(`    await expect(page.getByText(/Task .* created/i)).toBeVisible({ timeout: 5000 });`);
   codeLines.push(`  });`);
   codeLines.push(`});`);
 
