@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -307,8 +308,8 @@ export default function LoadTesting() {
                                     {/* Endpoints */}
                                     <div className="space-y-2">
                                         <Label>Endpoints to Test (one per line)</Label>
-                                        <textarea
-                                            className="w-full min-h-[120px] p-2 border rounded-md font-mono text-sm"
+                                        <Textarea
+                                            className="min-h-[120px] font-mono text-sm bg-background text-foreground border-input placeholder:text-muted-foreground"
                                             value={endpoints}
                                             onChange={(e) => setEndpoints(e.target.value)}
                                             placeholder="/&#10;/api/users&#10;/api/products"
