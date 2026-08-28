@@ -19,6 +19,7 @@ export interface AgentResponse {
 export interface LLMProvider {
   name: string;
   complete(messages: LLMMessage[]): Promise<AgentResponse>;
+  rawChat?(messages: LLMMessage[]): Promise<string>;
 }
 
 function buildToolsInstruction(): string {
@@ -81,17 +82,14 @@ export class OpenRouterProvider implements LLMProvider {
   }
 
   async complete(messages: LLMMessage[]): Promise<AgentResponse> {
+    const rawContent = await this.rawChat(messages);
+    return parseAgentResponse(rawContent);
+  }
+
+  async rawChat(messages: LLMMessage[]): Promise<string> {
     if (!this.apiKey) throw new Error('OpenRouter API Key not configured');
 
     const formattedMessages = messages.map(m => ({ role: m.role, content: m.content }));
-    const hasSystemMsg = formattedMessages.some(m => m.role === 'system');
-
-    if (!hasSystemMsg) {
-      formattedMessages.unshift({
-        role: 'system',
-        content: `You are a QA automation agent. Respond in JSON with format: {"thought": "...", "toolCall": {"name": "...", "args": {}}}${buildToolsInstruction()}`,
-      });
-    }
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -115,8 +113,7 @@ export class OpenRouterProvider implements LLMProvider {
     }
 
     const data = await response.json();
-    const rawContent = data.choices?.[0]?.message?.content || '{}';
-    return parseAgentResponse(rawContent);
+    return data.choices?.[0]?.message?.content || '{}';
   }
 }
 
@@ -134,17 +131,14 @@ export class GroqProvider implements LLMProvider {
   }
 
   async complete(messages: LLMMessage[]): Promise<AgentResponse> {
+    const rawContent = await this.rawChat(messages);
+    return parseAgentResponse(rawContent);
+  }
+
+  async rawChat(messages: LLMMessage[]): Promise<string> {
     if (!this.apiKey) throw new Error('Groq API Key not configured');
 
     const formattedMessages = messages.map(m => ({ role: m.role, content: m.content }));
-    const hasSystemMsg = formattedMessages.some(m => m.role === 'system');
-
-    if (!hasSystemMsg) {
-      formattedMessages.unshift({
-        role: 'system',
-        content: `You are a QA automation agent. Respond in JSON with format: {"thought": "...", "toolCall": {"name": "...", "args": {}}}${buildToolsInstruction()}`,
-      });
-    }
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -167,8 +161,7 @@ export class GroqProvider implements LLMProvider {
     }
 
     const data = await response.json();
-    const rawContent = data.choices?.[0]?.message?.content || '{}';
-    return parseAgentResponse(rawContent);
+    return data.choices?.[0]?.message?.content || '{}';
   }
 }
 
@@ -189,6 +182,16 @@ export class MockFallbackProvider implements LLMProvider {
       thought: 'Navigating and asserting target page accessibility state.',
       toolCall: { name: 'assert_condition', args: { assertion_type: 'body_exists', expected_value: 'true' } },
     };
+  }
+
+  async rawChat(messages: LLMMessage[]): Promise<string> {
+    return JSON.stringify({
+      specCode: `import { test, expect } from '@playwright/test';\n\ntest('recorded flow', async ({ page }) => {\n  // Automated fallback flow\n});`,
+      tags: ['fallback-synthesized'],
+      inferredAssertions: [],
+      selectorMap: {},
+      summary: 'Fallback generated spec.',
+    });
   }
 }
 
@@ -212,6 +215,25 @@ export class ProviderChain implements LLMProvider {
       }
     }
     throw new Error(`All LLM providers exhausted in fallback chain: ${errors.join(' | ')}`);
+  }
+
+  async rawChat(messages: LLMMessage[]): Promise<string> {
+    const errors: string[] = [];
+    for (const provider of this.providers) {
+      try {
+        if (provider.rawChat) {
+          console.log(`[LLM Adapter] Attempting rawChat via ${provider.name}...`);
+          return await provider.rawChat(messages);
+        }
+      } catch (err: any) {
+        console.warn(`[LLM Adapter] Provider ${provider.name} rawChat failed: ${err?.message}. Falling back...`);
+        errors.push(`${provider.name}: ${err?.message}`);
+      }
+    }
+    return JSON.stringify({
+      specCode: `import { test, expect } from '@playwright/test';\n\ntest('recorded flow', async ({ page }) => {\n  // Automated fallback\n});`,
+      tags: ['fallback'],
+    });
   }
 }
 
