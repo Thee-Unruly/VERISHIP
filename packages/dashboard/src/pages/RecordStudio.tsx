@@ -133,9 +133,10 @@ export default function RecordStudio() {
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCaseId, setSavedTestCaseId] = useState<string | null>(null);
 
-  // Timer reference
+  // Timer & Window reference
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
+  const recordWindowRef = useRef<Window | null>(null);
 
   // Recording Timer
   useEffect(() => {
@@ -166,6 +167,62 @@ export default function RecordStudio() {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
   }, [isRecording, sessionId]);
+
+  // Live SSE Stream Listener for Real-Time Browser Capture
+  useEffect(() => {
+    if (!sessionId || !isRecording) return;
+
+    const eventSource = new EventSource(`/api/recordings/${sessionId}/stream`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === "recording_step_captured" && data.step) {
+          const incoming = data.step;
+          const mappedStep: RecordedStepItem = {
+            id: incoming.id || `step_${Date.now()}`,
+            stepNumber: incoming.step_number || incoming.stepNumber,
+            actionType: incoming.action_type || incoming.actionType,
+            targetSelector: incoming.target_selector || incoming.targetSelector,
+            inputValue: incoming.input_value || incoming.inputValue,
+            isSensitive: incoming.is_sensitive || incoming.isSensitive,
+            pageUrl: incoming.page_url || incoming.pageUrl || targetUrl,
+            pageTitle: incoming.page_title || incoming.pageTitle || "Target App",
+            systemCategory: incoming.system_category || incoming.systemCategory || "action_trigger",
+            customTags: incoming.custom_tags || incoming.customTags || [],
+            isAssertion: incoming.is_assertion || incoming.isAssertion,
+            assertionRule: incoming.assertion_rule || incoming.assertionRule,
+          };
+
+          setSteps((prev) => {
+            // Avoid duplicate steps
+            if (prev.some((s) => s.stepNumber === mappedStep.stepNumber)) return prev;
+            return [...prev, mappedStep];
+          });
+          toast.info(`Captured: [${mappedStep.actionType.toUpperCase()}] ${mappedStep.targetSelector}`);
+        } else if (data.event === "recording_synthesized") {
+          setSynthesizedSpec(data.specCode);
+          setSynthesizerStatus(data.status || "success");
+          if (data.inferredAssertions && data.inferredAssertions.length > 0) {
+            setSuggestedAssertions(data.inferredAssertions);
+          }
+          setIsProcessing(false);
+          setActiveTab("spec");
+          toast.success("AI synthesized Playwright test script ready!");
+        }
+      } catch (e) {
+        console.error("SSE parse error:", e);
+      }
+    };
+
+    eventSource.onerror = () => {
+      // EventSource reconnects automatically
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [sessionId, isRecording, targetUrl]);
 
   // Fetch Reusable Flow Catalog
   const fetchFlows = async () => {
@@ -229,7 +286,22 @@ export default function RecordStudio() {
 
       const data = await res.json();
       setSessionId(data.sessionId);
-      toast.success("Interactive Recording Session started. Browser is active!");
+      toast.success("Interactive Recording Session started. Auto-spinning up browser window!");
+
+      // Auto-spin up dedicated browser window for the user
+      try {
+        const win = window.open(
+          targetUrl,
+          "VeriShipRecordingSession",
+          "width=1280,height=850,menubar=no,toolbar=no,location=yes,status=no,resizable=yes"
+        );
+        if (win) {
+          recordWindowRef.current = win;
+          win.focus();
+        }
+      } catch (e) {
+        console.error("Popup window launch error:", e);
+      }
 
       // Initial navigation step
       const initialStep: RecordedStepItem = {
@@ -336,6 +408,14 @@ export default function RecordStudio() {
     if (!sessionId) return;
     setIsRecording(false);
     setIsProcessing(true);
+
+    // Automatically close the recorded browser window
+    try {
+      if (recordWindowRef.current && !recordWindowRef.current.closed) {
+        recordWindowRef.current.close();
+        recordWindowRef.current = null;
+      }
+    } catch (e) {}
 
     try {
       toast.loading("Finalizing recording & synthesizing Playwright TypeScript test...");
@@ -626,6 +706,46 @@ export default function RecordStudio() {
             />
           </div>
         </div>
+
+        {/* Live Auto-Spun Browser Status Banner */}
+        {isRecording && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-xs shadow-sm backdrop-blur-md">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <span className="relative flex h-3 w-3 mt-1 sm:mt-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-red-300">Auto-Spun Browser Window Active:</span>
+                  <span className="font-mono text-foreground font-semibold">{targetUrl}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Interact naturally in the opened browser window. Clicks, form inputs, toasts, and dialogs are captured into the timeline below.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (recordWindowRef.current && !recordWindowRef.current.closed) {
+                  recordWindowRef.current.focus();
+                } else {
+                  recordWindowRef.current = window.open(
+                    targetUrl,
+                    "VeriShipRecordingSession",
+                    "width=1280,height=850,menubar=no,toolbar=no,location=yes,status=no,resizable=yes"
+                  );
+                }
+              }}
+              className="h-7 text-xs border-red-500/40 text-red-300 hover:bg-red-500/20 shrink-0"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" /> Focus / Bring Window to Front
+            </Button>
+          </div>
+        )}
 
         {/* Studio Dual Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
