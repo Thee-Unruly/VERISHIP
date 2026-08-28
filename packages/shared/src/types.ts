@@ -380,3 +380,140 @@ export interface Persona {
   metadata?: Record<string, unknown>;
   createdAt: string;
 }
+
+// ==========================================
+// Interactive Screen Step Recorder & Flow Memory Types
+// ==========================================
+
+export type RecordingSessionStatus = 'recording' | 'processing' | 'completed' | 'abandoned' | 'failed';
+export type SynthesizerStatus = 'pending' | 'synthesizing' | 'success' | 'fallback_template' | 'failed';
+
+export type StepActionType =
+  | 'click'
+  | 'fill'
+  | 'select'
+  | 'navigate'
+  | 'assert'
+  | 'modal_open'
+  | 'toast'
+  | 'keypress';
+
+export type SystemStepCategory =
+  | 'auth'
+  | 'navigation'
+  | 'form_fill'
+  | 'action_trigger'
+  | 'modal_flow'
+  | 'assertion'
+  | 'table_grid';
+
+export interface AssertionRule {
+  type: 'visible' | 'hidden' | 'text_match' | 'count';
+  expected?: string;
+  confidence?: number;
+  isConfirmed?: boolean;
+}
+
+export interface RecordedStep {
+  id: string;
+  sessionId: string;
+  stepNumber: number;
+  actionType: StepActionType;
+  targetSelector: string;
+  selectorType?: 'aria' | 'label' | 'testid' | 'css';
+  inputValue?: string;
+  isSensitive?: boolean;
+  isTruncated?: boolean;
+  payloadUrl?: string;
+  pageUrl: string;
+  pageTitle?: string;
+  screenshotUrl?: string;
+  systemCategory: SystemStepCategory;
+  customTags: string[];
+  isAssertion?: boolean;
+  assertionRule?: AssertionRule;
+  createdAt: string;
+}
+
+export interface RecordingSession {
+  id: string;
+  workspaceId: string;
+  projectId?: string;
+  testCaseId?: string;
+  name: string;
+  targetUrl: string;
+  status: RecordingSessionStatus;
+  durationMs: number;
+  stepCount: number;
+  tags: string[];
+  synthesizerStatus: SynthesizerStatus;
+  synthesizerWarning?: string;
+  rawEventsUrl?: string;
+  specUrl?: string;
+  traceUrl?: string;
+  videoUrl?: string;
+  lastHeartbeat?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface StartRecordingInput {
+  targetUrl: string;
+  name?: string;
+  workspaceId?: string;
+  projectId?: string;
+  testCaseId?: string;
+  tags?: string[];
+  authMode?: 'standard' | 'clean' | 'incognito';
+}
+
+export interface TagRegistryItem {
+  id: string;
+  workspaceId: string;
+  slug: string;
+  displayName: string;
+  category: 'domain' | 'feature' | 'flow' | 'entity';
+  usageCount: number;
+  createdAt: string;
+}
+
+export type FlowValidationStatus = 'valid' | 'degraded' | 'stale' | 'invalid';
+
+export interface FlowBlock {
+  id: string;
+  workspaceId: string;
+  projectId?: string;
+  name: string;
+  description?: string;
+  version: number;
+  systemCategory: string;
+  tags: string[];
+  stepsSnapshot: RecordedStep[];
+  selectorMap: Record<string, string>;
+  validationStatus: FlowValidationStatus;
+  lastReplayedAt?: string;
+  lastContractValidatedAt: string;
+  runCount: number;
+  successCount: number;
+  failureCount: number;
+  successRate: number;
+  sourceSessionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowMatchInput {
+  tags: string[];
+  domain?: string;
+  feature?: string;
+  workspaceId?: string;
+  projectId?: string;
+}
+
+export interface FlowMatchResult {
+  match: FlowBlock | null;
+  matchScore: number;
+  fallbackRequired: boolean;
+  reason?: string;
+}
+

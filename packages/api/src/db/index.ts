@@ -297,6 +297,88 @@ export async function initDb(maxRetries = 10, retryDelayMs = 2000) {
         metadata JSONB,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      -- Interactive Screen Step Recorder & Tagged Flow Memory
+      CREATE TABLE IF NOT EXISTS recording_sessions (
+        id VARCHAR(64) PRIMARY KEY,
+        workspace_id VARCHAR(64) NOT NULL DEFAULT 'default',
+        project_id VARCHAR(64) REFERENCES projects(id) ON DELETE SET NULL,
+        test_case_id VARCHAR(64) REFERENCES test_cases(id) ON DELETE SET NULL,
+        name VARCHAR(255) NOT NULL,
+        target_url TEXT NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'recording',
+        duration_ms INT DEFAULT 0,
+        step_count INT DEFAULT 0,
+        tags TEXT[] DEFAULT '{}',
+        synthesizer_status VARCHAR(50) DEFAULT 'pending',
+        synthesizer_warning TEXT,
+        raw_events_url TEXT,
+        spec_url TEXT,
+        trace_url TEXT,
+        video_url TEXT,
+        last_heartbeat TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        completed_at TIMESTAMP WITH TIME ZONE
+      );
+
+      CREATE TABLE IF NOT EXISTS recorded_steps (
+        id VARCHAR(64) PRIMARY KEY,
+        session_id VARCHAR(64) REFERENCES recording_sessions(id) ON DELETE CASCADE,
+        step_number INT NOT NULL,
+        action_type VARCHAR(50) NOT NULL,
+        target_selector TEXT NOT NULL,
+        selector_type VARCHAR(50) NOT NULL DEFAULT 'aria',
+        input_value TEXT,
+        is_sensitive BOOLEAN DEFAULT FALSE,
+        is_truncated BOOLEAN DEFAULT FALSE,
+        payload_url TEXT,
+        page_url TEXT NOT NULL,
+        page_title VARCHAR(255),
+        screenshot_url TEXT,
+        system_category VARCHAR(50) NOT NULL DEFAULT 'action_trigger',
+        custom_tags TEXT[] DEFAULT '{}',
+        is_assertion BOOLEAN DEFAULT FALSE,
+        assertion_rule JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS tag_registry (
+        id VARCHAR(64) PRIMARY KEY,
+        workspace_id VARCHAR(64) NOT NULL DEFAULT 'default',
+        slug VARCHAR(100) NOT NULL,
+        display_name VARCHAR(100) NOT NULL,
+        category VARCHAR(50) NOT NULL DEFAULT 'feature',
+        usage_count INT DEFAULT 1,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (workspace_id, slug)
+      );
+
+      CREATE TABLE IF NOT EXISTS flow_blocks (
+        id VARCHAR(64) PRIMARY KEY,
+        workspace_id VARCHAR(64) NOT NULL DEFAULT 'default',
+        project_id VARCHAR(64) REFERENCES projects(id) ON DELETE SET NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        version INT NOT NULL DEFAULT 1,
+        system_category VARCHAR(50) NOT NULL,
+        tags TEXT[] NOT NULL DEFAULT '{}',
+        steps_snapshot JSONB NOT NULL,
+        selector_map JSONB NOT NULL,
+        validation_status VARCHAR(30) NOT NULL DEFAULT 'valid',
+        last_replayed_at TIMESTAMP WITH TIME ZONE,
+        last_contract_validated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        run_count INT DEFAULT 0,
+        success_count INT DEFAULT 0,
+        failure_count INT DEFAULT 0,
+        success_rate NUMERIC(5, 2) DEFAULT 100.0,
+        source_session_id VARCHAR(64) REFERENCES recording_sessions(id) ON DELETE SET NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_flow_blocks_tags ON flow_blocks USING GIN (tags);
+      CREATE INDEX IF NOT EXISTS idx_flow_blocks_health ON flow_blocks (validation_status, success_rate);
+      CREATE INDEX IF NOT EXISTS idx_recorded_steps_session ON recorded_steps (session_id, step_number);
     `);
       console.log('[DB] Unified VeriShip Quality Governance database schema initialized.');
       return;
