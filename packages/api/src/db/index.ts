@@ -42,20 +42,6 @@ export async function initDb(maxRetries = 10, retryDelayMs = 2000) {
         last_login TIMESTAMP WITH TIME ZONE
       );
 
-      CREATE TABLE IF NOT EXISTS user_project_assignment (
-        user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
-        project_id VARCHAR(64) REFERENCES projects(id) ON DELETE CASCADE,
-        role VARCHAR(50) DEFAULT 'member',
-        PRIMARY KEY (user_id, project_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS settings (
-        id VARCHAR(64) PRIMARY KEY,
-        key VARCHAR(100) UNIQUE NOT NULL,
-        value JSONB NOT NULL,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-
       -- Core Projects & Workspaces
       CREATE TABLE IF NOT EXISTS projects (
         id VARCHAR(64) PRIMARY KEY,
@@ -67,6 +53,20 @@ export async function initDb(maxRetries = 10, retryDelayMs = 2000) {
         quality_coverage NUMERIC(5, 2) DEFAULT 0.0,
         target_release_date TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS user_project_assignment (
+        user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+        project_id VARCHAR(64) REFERENCES projects(id) ON DELETE CASCADE,
+        role VARCHAR(50) DEFAULT 'member',
+        PRIMARY KEY (user_id, project_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS settings (
+        id VARCHAR(64) PRIMARY KEY,
+        key VARCHAR(100) UNIQUE NOT NULL,
+        value JSONB NOT NULL,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
