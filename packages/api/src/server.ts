@@ -71,6 +71,112 @@ async function start() {
       };
     });
 
+    // Universal In-Browser Step Recording Probe Script
+    fastify.get('/recorder-probe.js', async (req, reply) => {
+      reply.header('Content-Type', 'application/javascript');
+      reply.header('Access-Control-Allow-Origin', '*');
+      return `
+(function() {
+  if (window.__VERISHIP_RECORDER_ACTIVE__) return;
+  window.__VERISHIP_RECORDER_ACTIVE__ = true;
+
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = window.__VERISHIP_SESSION__ || params.get('veriship_session') || localStorage.getItem('veriship_session');
+  const apiUrl = window.__VERISHIP_API__ || 'http://localhost:4000';
+
+  if (!sessionId) {
+    console.warn('[VeriShip Recorder] No active session ID found. Set window.__VERISHIP_SESSION__ or pass ?veriship_session=...');
+    return;
+  }
+
+  // Floating recorder pill UI
+  const hud = document.createElement('div');
+  hud.id = 'veriship-recorder-hud';
+  hud.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999999;background:rgba(15,23,42,0.95);color:#fff;border:1px solid rgba(239,68,68,0.5);border-radius:14px;padding:10px 16px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;box-shadow:0 12px 30px rgba(0,0,0,0.6);display:flex;align-items:center;gap:12px;backdrop-filter:blur(10px);';
+  hud.innerHTML = \`
+    <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;box-shadow:0 0 10px #ef4444;"></span>
+    <div>
+      <div style="font-weight:700;color:#f87171;font-size:12px;">VeriShip Live Capturer Active</div>
+      <div style="color:#94a3b8;font-size:11px;">Recorded Steps: <b id="veriship-step-count" style="color:#fff;">0</b></div>
+    </div>
+    <button id="veriship-stop-btn" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;margin-left:4px;">Finish & Synthesize</button>
+  \`;
+  document.body.appendChild(hud);
+
+  let count = 0;
+
+  function sendEvent(actionType, targetSelector, inputValue, isSensitive, category) {
+    count++;
+    const badge = document.getElementById('veriship-step-count');
+    if (badge) badge.innerText = count;
+
+    fetch(\`\${apiUrl}/api/recordings/\${sessionId}/event\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actionType,
+        targetSelector,
+        inputValue: isSensitive ? '[REDACTED:PASSWORD]' : inputValue,
+        isSensitive,
+        pageUrl: window.location.href,
+        pageTitle: document.title,
+        systemCategory: category || 'action_trigger'
+      })
+    }).catch(e => console.error('[VeriShip Probe Error]:', e));
+  }
+
+  function getSelector(el) {
+    const aria = el.getAttribute('aria-label');
+    if (aria) return "page.getByLabel('" + aria.replace(/'/g, "\\\\'") + "')";
+    const placeholder = el.getAttribute('placeholder');
+    if (placeholder) return "page.getByPlaceholder('" + placeholder.replace(/'/g, "\\\\'") + "')";
+    const testId = el.getAttribute('data-testid');
+    if (testId) return "page.getByTestId('" + testId.replace(/'/g, "\\\\'") + "')";
+    const role = el.getAttribute('role') || el.tagName.toLowerCase();
+    const text = el.innerText?.trim()?.slice(0, 40);
+    if (text && (role === 'button' || role === 'link' || role === 'tab' || role === 'a' || el.tagName === 'BUTTON' || el.tagName === 'A')) {
+      const mappedRole = (role === 'a' || el.tagName === 'A') ? 'link' : (role === 'button' || el.tagName === 'BUTTON') ? 'button' : role;
+      return "page.getByRole('" + mappedRole + "', { name: '" + text.replace(/'/g, "\\\\'") + "' })";
+    }
+    if (el.id) return "page.locator('#" + el.id + "')";
+    if (el.name) return "page.locator('[name=\\"" + el.name + "\\"]')'";
+    return "page.locator('" + el.tagName.toLowerCase() + "')";
+  }
+
+  // Intercept Clicks
+  document.addEventListener('click', function(e) {
+    const target = e.target;
+    if (!target || target.closest('#veriship-recorder-hud')) return;
+    const selector = getSelector(target);
+    sendEvent('click', selector, undefined, false, 'click');
+  }, true);
+
+  // Intercept Inputs
+  let debounceTimeout = null;
+  document.addEventListener('input', function(e) {
+    const target = e.target;
+    if (!target || target.closest('#veriship-recorder-hud')) return;
+    const isSensitive = target.type === 'password' || /password|secret|token/i.test(target.name || target.id || '');
+    const selector = getSelector(target);
+    const value = target.value;
+
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(function() {
+      sendEvent('fill', selector, value, isSensitive, 'form_fill');
+    }, 350);
+  }, true);
+
+  // Stop button handler
+  document.getElementById('veriship-stop-btn')?.addEventListener('click', async function() {
+    await fetch(\`\${apiUrl}/api/recordings/\${sessionId}/stop\`, { method: 'POST' });
+    hud.innerHTML = '<div style="color:#10b981;font-weight:700;">✓ Recording Saved! Return to VeriShip Studio.</div>';
+  });
+
+  console.log('[VeriShip Recorder] Hooked live capture to session ' + sessionId);
+})();
+      `;
+    });
+
     fastify.get('/api/notifications', async (req, reply) => {
       try {
         const notifs: any[] = [];

@@ -805,24 +805,39 @@ export default function RecordStudio() {
               </div>
             </div>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (recordWindowRef.current && !recordWindowRef.current.closed) {
-                  recordWindowRef.current.focus();
-                } else {
-                  recordWindowRef.current = window.open(
-                    targetUrl,
-                    "VeriShipRecordingSession",
-                    "width=1280,height=850,menubar=no,toolbar=no,location=yes,status=no,resizable=yes"
-                  );
-                }
-              }}
-              className="h-7 text-xs border-red-500/40 text-red-300 hover:bg-red-500/20 shrink-0"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" /> Focus / Bring Window to Front
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const script = `window.__VERISHIP_SESSION__='${sessionId}';window.__VERISHIP_API__='http://localhost:4000';var s=document.createElement('script');s.src='http://localhost:4000/recorder-probe.js';document.head.appendChild(s);`;
+                  navigator.clipboard.writeText(script);
+                  toast.success("1-Click Probe snippet copied! Open AgilePM in any tab, press F12 Console, paste & enter to record live!");
+                }}
+                className="h-7 text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/20 shrink-0"
+              >
+                <Zap className="h-3 w-3 mr-1 text-amber-400" /> Connect Any Tab (F12)
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (recordWindowRef.current && !recordWindowRef.current.closed) {
+                    recordWindowRef.current.focus();
+                  } else {
+                    recordWindowRef.current = window.open(
+                      targetUrl,
+                      "VeriShipRecordingSession",
+                      "width=1280,height=850,menubar=no,toolbar=no,location=yes,status=no,resizable=yes"
+                    );
+                  }
+                }}
+                className="h-7 text-xs border-red-500/40 text-red-300 hover:bg-red-500/20 shrink-0"
+              >
+                <ExternalLink className="h-3 w-3 mr-1" /> Bring Window to Front
+              </Button>
+            </div>
           </div>
         )}
 
