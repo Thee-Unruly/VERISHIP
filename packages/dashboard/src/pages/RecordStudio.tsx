@@ -36,6 +36,8 @@ import {
   FileCode,
   Compass,
   Cpu,
+  History,
+  FolderOpen,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useProjects } from "@/context/ProjectsContext";
@@ -77,6 +79,17 @@ interface RecordedStepItem {
   };
 }
 
+interface RecordingSessionItem {
+  id: string;
+  name: string;
+  target_url: string;
+  status: string;
+  total_steps: number;
+  tags: string[];
+  created_at: string;
+  project_name?: string;
+}
+
 interface FlowBlockItem {
   id: string;
   name: string;
@@ -107,6 +120,7 @@ export default function RecordStudio() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [steps, setSteps] = useState<RecordedStepItem[]>([]);
+  const [leftTab, setLeftTab] = useState<"timeline" | "embedded">("timeline");
   const [activeTab, setActiveTab] = useState<string>("spec");
 
   // Output / Synthesized state
@@ -128,6 +142,10 @@ export default function RecordStudio() {
   const [flows, setFlows] = useState<FlowBlockItem[]>([]);
   const [flowsLoading, setFlowsLoading] = useState(false);
   const [flowSearch, setFlowSearch] = useState("");
+
+  // Saved Recording Sessions History
+  const [savedSessions, setSavedSessions] = useState<RecordingSessionItem[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   // Save to test case state
   const [savingTestCase, setSavingTestCase] = useState(false);
@@ -195,7 +213,6 @@ export default function RecordStudio() {
           };
 
           setSteps((prev) => {
-            // Avoid duplicate steps
             if (prev.some((s) => s.stepNumber === mappedStep.stepNumber)) return prev;
             return [...prev, mappedStep];
           });
@@ -215,9 +232,7 @@ export default function RecordStudio() {
       }
     };
 
-    eventSource.onerror = () => {
-      // EventSource reconnects automatically
-    };
+    eventSource.onerror = () => {};
 
     return () => {
       eventSource.close();
@@ -240,9 +255,71 @@ export default function RecordStudio() {
     }
   };
 
+  // Fetch Saved Recording Sessions History
+  const fetchSavedSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await fetch(`/api/recordings?limit=20`);
+      if (res.ok) {
+        const data = await res.json();
+        setSavedSessions(data.items || []);
+      }
+    } catch (e) {
+      console.error("Error loading saved sessions:", e);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchFlows();
+    fetchSavedSessions();
   }, [flowSearch]);
+
+  // Load a past session's steps and spec
+  const handleLoadPastSession = async (pastSessionId: string) => {
+    try {
+      toast.loading("Loading recorded session details...");
+      const res = await fetch(`/api/recordings/${pastSessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessionId(pastSessionId);
+        setSessionName(data.session.name);
+        setTargetUrl(data.session.target_url);
+        if (data.session.tags) setCustomTags(data.session.tags);
+
+        const mappedSteps: RecordedStepItem[] = (data.steps || []).map((s: any) => ({
+          id: s.id,
+          stepNumber: s.step_number,
+          actionType: s.action_type,
+          targetSelector: s.target_selector,
+          inputValue: s.input_value,
+          isSensitive: s.is_sensitive,
+          pageUrl: s.page_url,
+          pageTitle: s.page_title,
+          systemCategory: s.system_category,
+          customTags: s.custom_tags || [],
+          isAssertion: s.is_assertion,
+          assertionRule: s.assertion_rule,
+        }));
+        setSteps(mappedSteps);
+
+        const dynamicSpec = generateDynamicSpec(
+          data.session.name,
+          data.session.target_url,
+          mappedSteps,
+          data.session.tags || []
+        );
+        setSynthesizedSpec(dynamicSpec);
+        setActiveTab("spec");
+        toast.dismiss();
+        toast.success(`Loaded session: ${data.session.name}`);
+      }
+    } catch (e) {
+      toast.dismiss();
+      toast.error("Failed to load session details");
+    }
+  };
 
   // Quick Preset Selector
   const applyPreset = (name: string, url: string, tags: string[]) => {
@@ -257,6 +334,21 @@ export default function RecordStudio() {
     if (!targetUrl.trim()) {
       toast.error("Please provide a valid Target URL.");
       return;
+    }
+
+    // 1. Open popup window SYNCHRONOUSLY on the direct user click gesture to bypass popup blockers
+    try {
+      const popup = window.open(
+        targetUrl,
+        "VeriShipRecordingSession",
+        "width=1280,height=850,menubar=no,toolbar=no,location=yes,status=no,resizable=yes"
+      );
+      if (popup) {
+        recordWindowRef.current = popup;
+        popup.focus();
+      }
+    } catch (e) {
+      console.warn("Popup blocked or not supported:", e);
     }
 
     try {
@@ -286,22 +378,7 @@ export default function RecordStudio() {
 
       const data = await res.json();
       setSessionId(data.sessionId);
-      toast.success("Interactive Recording Session started. Auto-spinning up browser window!");
-
-      // Auto-spin up dedicated browser window for the user
-      try {
-        const win = window.open(
-          targetUrl,
-          "VeriShipRecordingSession",
-          "width=1280,height=850,menubar=no,toolbar=no,location=yes,status=no,resizable=yes"
-        );
-        if (win) {
-          recordWindowRef.current = win;
-          win.focus();
-        }
-      } catch (e) {
-        console.error("Popup window launch error:", e);
-      }
+      toast.success("Interactive Recording Session started. Auto-spun browser window!");
 
       // Initial navigation step
       const initialStep: RecordedStepItem = {
@@ -455,6 +532,7 @@ export default function RecordStudio() {
       toast.success("Test synthesis complete! Production Playwright test generated.");
       setActiveTab("spec");
       fetchFlows();
+      fetchSavedSessions();
     } catch (err: any) {
       toast.dismiss();
       toast.error(err.message || "Synthesis failed");
@@ -482,6 +560,7 @@ export default function RecordStudio() {
         setSavedTestCaseId(data.testCaseId);
         toast.success("Saved to Test Cases catalog and indexed into Tagged Flow Memory!");
         fetchFlows();
+        fetchSavedSessions();
       }
     } catch (e) {
       toast.error("Failed to save test case");
@@ -749,33 +828,63 @@ export default function RecordStudio() {
 
         {/* Studio Dual Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Left Column: Live Step Timeline */}
+          {/* Left Column: Live Step Timeline / Embedded Browser */}
           <div className="lg:col-span-6 flex flex-col">
             <Card className="border-border/50 bg-card/70 backdrop-blur-md flex-1 flex flex-col shadow-sm">
-              <CardHeader className="py-3 px-4 border-b border-border/40 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-bold flex items-center gap-2">
-                    <Radio className="h-4 w-4 text-primary" /> Live Step Timeline
-                  </CardTitle>
-                  <CardDescription className="text-[11px]">
-                    {steps.length} discrete interaction{steps.length !== 1 ? "s" : ""} captured with PII redaction.
-                  </CardDescription>
+              <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setLeftTab("timeline")}
+                    className={`text-xs font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                      leftTab === "timeline" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Radio className="h-3.5 w-3.5 text-primary" /> Live Step Timeline ({steps.length})
+                  </button>
+                  <button
+                    onClick={() => setLeftTab("embedded")}
+                    className={`text-xs font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                      leftTab === "embedded" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Laptop className="h-3.5 w-3.5 text-blue-400" /> Embedded Browser Canvas
+                  </button>
                 </div>
 
-                {isRecording && (
+                {isRecording && leftTab === "timeline" && (
                   <Button
                     onClick={() => setCheckpointModalOpen(true)}
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                    className="h-6 text-xs border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
                   >
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Assertion
+                    <Plus className="h-3 w-3 mr-1" /> Add Assertion
                   </Button>
                 )}
               </CardHeader>
 
-              <CardContent className="p-4 flex-1 flex flex-col justify-between space-y-3 min-h-[480px]">
-                {steps.length === 0 ? (
+              <CardContent className="p-3 flex-1 flex flex-col justify-between space-y-3 min-h-[480px]">
+                {leftTab === "embedded" ? (
+                  <div className="flex-1 flex flex-col rounded-lg border border-border/50 overflow-hidden bg-background">
+                    <div className="p-2 bg-muted/40 border-b border-border/40 flex items-center justify-between text-xs">
+                      <span className="font-mono text-muted-foreground truncate">{targetUrl}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => window.open(targetUrl, "_blank")}
+                        className="h-5 text-[10px] px-1.5"
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" /> Open in New Tab
+                      </Button>
+                    </div>
+                    <iframe
+                      src={targetUrl}
+                      title="Embedded Target View"
+                      className="w-full flex-1 min-h-[420px] border-0"
+                      sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                    />
+                  </div>
+                ) : steps.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3 border border-dashed border-border/50 rounded-lg bg-muted/10 my-auto">
                     <div className="h-12 w-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-inner">
                       <Compass className="h-6 w-6" />
@@ -799,7 +908,7 @@ export default function RecordStudio() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2.5 max-h-[440px] overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
                     {steps.map((step) => (
                       <div
                         key={step.id}
@@ -863,7 +972,7 @@ export default function RecordStudio() {
                   </div>
                 )}
 
-                {/* Quick Simulation Bar for Interactive Testing */}
+                {/* Quick Simulation Bar */}
                 {isRecording && (
                   <div className="mt-2 pt-2 border-t border-border/40 flex flex-wrap gap-1.5 items-center justify-between text-xs text-muted-foreground">
                     <span className="text-[11px] font-medium">Quick Step Injector:</span>
@@ -915,20 +1024,23 @@ export default function RecordStudio() {
             </Card>
           </div>
 
-          {/* Right Column: Synthesized Spec & Memory Studio */}
+          {/* Right Column: Synthesized Spec & Memory Studio & Past Sessions */}
           <div className="lg:col-span-6 flex flex-col">
             <Card className="border-border/50 bg-card/70 backdrop-blur-md flex-1 flex flex-col shadow-sm">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-                <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
+                <CardHeader className="py-2 px-3 border-b border-border/40 flex flex-row items-center justify-between">
                   <TabsList className="bg-muted/40 border border-border/40 h-8">
                     <TabsTrigger value="spec" className="text-xs gap-1.5 h-7">
                       <Sparkles className="h-3.5 w-3.5 text-primary" /> Synthesized Spec (.spec.ts)
                     </TabsTrigger>
                     <TabsTrigger value="fixtures" className="text-xs gap-1.5 h-7">
-                      <Database className="h-3.5 w-3.5 text-emerald-400" /> Flow Memory & Fixtures
+                      <Database className="h-3.5 w-3.5 text-emerald-400" /> Flow Fixtures
+                    </TabsTrigger>
+                    <TabsTrigger value="history" className="text-xs gap-1.5 h-7">
+                      <History className="h-3.5 w-3.5 text-blue-400" /> Saved Recordings ({savedSessions.length})
                     </TabsTrigger>
                     <TabsTrigger value="catalog" className="text-xs gap-1.5 h-7">
-                      <Layers className="h-3.5 w-3.5 text-purple-400" /> Reusable Flow Catalog
+                      <Layers className="h-3.5 w-3.5 text-purple-400" /> Flow Memory ({flows.length})
                     </TabsTrigger>
                   </TabsList>
 
@@ -967,7 +1079,7 @@ export default function RecordStudio() {
                       <div className="space-y-1">
                         <p className="text-sm font-bold text-foreground">Awaiting Test Synthesis</p>
                         <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                          Record steps on the left, then click <span className="font-semibold text-primary">"Stop & Synthesize"</span> to compile an AST-validated Playwright TypeScript test file.
+                          Record steps on the left or load a saved session from the <span className="font-semibold text-blue-400">"Saved Recordings"</span> tab.
                         </p>
                       </div>
                     </div>
@@ -1018,7 +1130,60 @@ export default function RecordStudio() {
                   </div>
                 </TabsContent>
 
-                {/* Tab 3: Reusable Flow Catalog */}
+                {/* Tab 3: Saved Recordings History */}
+                <TabsContent value="history" className="m-0 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <History className="h-3.5 w-3.5 text-blue-400" /> Permanent Database Recording Sessions
+                    </h3>
+                    <Button size="sm" variant="ghost" onClick={fetchSavedSessions} className="h-6 text-[11px] px-2">
+                      <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                    {savedSessions.length === 0 ? (
+                      <p className="text-center text-xs text-muted-foreground py-10">
+                        No saved recording sessions in database yet. Click "Start Recording" to create one.
+                      </p>
+                    ) : (
+                      savedSessions.map((sess) => (
+                        <div
+                          key={sess.id}
+                          className="p-3 rounded-lg border border-border/40 bg-background/40 hover:bg-background/80 transition-all text-xs space-y-2 flex items-center justify-between"
+                        >
+                          <div className="space-y-1 min-w-0 flex-1 mr-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-foreground truncate">{sess.name}</span>
+                              <Badge variant="outline" className="text-[10px] text-primary border-primary/20">
+                                {sess.total_steps || 0} steps
+                              </Badge>
+                            </div>
+                            <div className="font-mono text-[11px] text-muted-foreground truncate">
+                              {sess.target_url}
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                              <span>ID: {sess.id.slice(0, 12)}...</span>
+                              <span>&bull;</span>
+                              <span>{new Date(sess.created_at).toLocaleTimeString()}</span>
+                            </div>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleLoadPastSession(sess.id)}
+                            className="h-7 text-xs border-primary/30 text-primary hover:bg-primary/10 shrink-0"
+                          >
+                            <FolderOpen className="h-3.5 w-3.5 mr-1" /> Load Session
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Tab 4: Reusable Flow Catalog */}
                 <TabsContent value="catalog" className="m-0 p-4 space-y-3">
                   <div className="relative">
                     <Search className="h-3.5 w-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
